@@ -1,0 +1,31 @@
+jog_joint_node:
+  joint_names:
+    - l_shoulder_pan_joint
+    - l_shoulder_lift_joint
+    - l_upper_arm_roll_joint
+    - l_elbow_flex_joint
+    - l_forearm_roll_joint
+    - l_wrist_flex_joint
+    - l_wrist_roll_joint
+
+
+jog_frame_node:
+  group_names:
+    - left_arm 
+  link_names:
+    - l_gripper_tool_frame
+
+# Somehow, UR5 moveit doesn't have controller name, so specify here
+move_group:
+  controller_list:
+    - name: l_arm_controller
+      action_ns: follow_joint_trajectory
+      type: FollowJointTrajectory
+      joints:
+        - l_shoulder_pan_joint
+        - l_shoulder_lift_joint
+        - l_upper_arm_roll_joint
+        - l_elbow_flex_joint
+        - l_forearm_roll_joint
+        - l_wrist_flex_joint
+        - l_wrist_roll_joint

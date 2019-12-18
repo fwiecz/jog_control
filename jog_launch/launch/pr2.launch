@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="use_fake_joint" default="false"/>
+  <arg name="use_moveit" default="false"/>
+  <arg name="use_rviz" default="false"/>
+  <arg name="use_joy" default="false"/>
+  <arg name="use_action" default="true"/>
+  <arg name="intermittent" default="false"/>
+
+  <!-- Launch fake_joint_launch -->
+  <include if="$(arg use_fake_joint)"
+	   file="$(find fake_joint_launch)/launch/ur5.launch">
+    <arg name="use_rviz" value="false"/>
+  </include>
+
+  <!-- Launch MoveIt! -->
+  <include if="$(arg use_moveit)"
+	   file="$(find ur5_moveit_config)/launch/ur5_moveit_planning_execution.launch"/>
+
+  <!-- Launch rviz -->
+  <node if="$(arg use_rviz)"
+	name="rviz" pkg="rviz" type="rviz"
+	args="-d $(find jog_launch)/launch/jog.rviz"/>
+  
+  <rosparam command="load" file="$(find jog_launch)/config/pr2_jog.yaml"/>
+
+<!--
+  <node name="jog_joint_node" pkg="jog_controller" type="jog_joint_node" output="screen">
+    <param name="use_action" value="$(arg use_action)"/>
+    <param name="intermittent" value="$(arg intermittent)"/>
+  </node>
+-->
+  <node name="jog_frame_node" pkg="jog_controller" type="jog_frame_node" output="screen">
+    <param name="use_action" value="$(arg use_action)"/>
+    <param name="intermittent" value="$(arg intermittent)"/>
+  </node>
+
+  <!-- Launch joypad -->
+<!--
+  <include if="$(arg use_joy)" file="$(find jog_controller)/launch/joypad.launch">
+    <arg name="group_name" value="manipulator"/>
+    <arg name="frame_id" value="base_link"/>
+    <arg name="link_name" value="ee_link"/>
+  </include>
+-->
+
+</launch>
