@@ -43,7 +43,9 @@ public:
   void joint_state_cb (sensor_msgs::JointStateConstPtr msg);
   int get_controller_list();
   void follow_absolute_pose_thread();
-
+  void getFkPose();
+  void jogStep(double rate);
+  void publishPose(sensor_msgs::JointState state);
 protected:
   ros::Subscriber joint_state_sub_, jog_frame_sub_;
   ros::ServiceClient fk_client_, ik_client_;
@@ -59,8 +61,7 @@ protected:
   bool use_action_;
   bool intermittent_;
 
-  std::vector<double> abs_position;
-  std::vector<double> abs_angle;
+  jog_msgs::JogFrameConstPtr ref_msg_;
 
   std::string target_link_;
   std::string group_name_;

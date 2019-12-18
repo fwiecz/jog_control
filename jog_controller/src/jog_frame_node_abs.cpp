@@ -2,6 +2,8 @@
 #include <jog_controller/jog_frame_node_abs.h>
 #include <thread>
 #include <boost/thread/thread.hpp>
+#include <math.h>
+#include <typeinfo>
 
 namespace jog_frame {
 
@@ -185,84 +187,148 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
   // Update reference frame only if the stamp is older than last_stamp_ + time_from_start_
   if (msg->header.stamp > last_stamp_ + ros::Duration(time_from_start_))
   {
-    joint_state_.name.clear();
-    joint_state_.position.clear();
-    joint_state_.velocity.clear();
-    joint_state_.effort.clear();
-    for (auto it=joint_map_.begin(); it!=joint_map_.end(); it++)
-    {
-      // Exclude joint in exclude_joints_
-      if (std::find(exclude_joints_.begin(),
-                    exclude_joints_.end(), it->first) != exclude_joints_.end())
-      {
-        ROS_INFO_STREAM("joint " << it->first << "is excluded from FK");
-        continue;
-      }
-      // Update reference joint_state
-      joint_state_.name.push_back(it->first);
-      joint_state_.position.push_back(it->second);
-      joint_state_.velocity.push_back(0.0);
-      joint_state_.effort.push_back(0.0);
-    }
-    // Update forward kinematics
-    moveit_msgs::GetPositionFK fk;
-
-    fk.request.header.frame_id = msg->header.frame_id;
-    fk.request.header.stamp = ros::Time::now();
-    fk.request.fk_link_names.clear();
-    fk.request.fk_link_names.push_back(msg->link_name);
-    fk.request.robot_state.joint_state = joint_state_;
-
-    if (fk_client_.call(fk))
-    {
-      if(fk.response.error_code.val != moveit_msgs::MoveItErrorCodes::SUCCESS)
-      {
-        ROS_INFO_STREAM("fk: " << fk.request);
-        ROS_WARN("****FK error %d", fk.response.error_code.val);
-        return;
-      }
-      if (fk.response.pose_stamped.size() != 1)
-      {
-        for (int i=0; i<fk.response.pose_stamped.size(); i++)
-        {
-          ROS_ERROR_STREAM("fk[" << i << "]:\n" << fk.response.pose_stamped[0]);
-        }
-      }
-      pose_stamped_ = fk.response.pose_stamped[0];
-    }
-    else
-    {
-      ROS_ERROR("Failed to call service /computte_fk");
-      return;
-    }
-  }
+    // update our reference message for the secondary thread
+    ref_msg_ = msg;
+  }  
   // Update timestamp of the last jog command
   last_stamp_ = msg->header.stamp;
+
+  // update pose_stamped_
+  //pose_stamped_.pose = ref_pose.pose;  
+}
+
+void JogFrameNodeAbs::getFkPose() {
+  joint_state_.name.clear();
+  joint_state_.position.clear();
+  joint_state_.velocity.clear();
+  joint_state_.effort.clear();
+  for (auto it=joint_map_.begin(); it!=joint_map_.end(); it++)
+  {
+    // Exclude joint in exclude_joints_
+    if (std::find(exclude_joints_.begin(),
+                  exclude_joints_.end(), it->first) != exclude_joints_.end())
+    {
+      ROS_INFO_STREAM("joint " << it->first << "is excluded from FK");
+      continue;
+    }
+    // Update reference joint_state
+    joint_state_.name.push_back(it->first);
+    joint_state_.position.push_back(it->second);
+    joint_state_.velocity.push_back(0.0);
+    joint_state_.effort.push_back(0.0);
+  }
+
+  // Update forward kinematics
+  moveit_msgs::GetPositionFK fk;
+
+  fk.request.header.frame_id = ref_msg_->header.frame_id;
+  fk.request.header.stamp = ros::Time::now();
+  fk.request.fk_link_names.clear();
+  fk.request.fk_link_names.push_back(ref_msg_->link_name);
+  fk.request.robot_state.joint_state = joint_state_;
+
+  if (fk_client_.call(fk))
+  {
+    if(fk.response.error_code.val != moveit_msgs::MoveItErrorCodes::SUCCESS)
+    {
+      ROS_INFO_STREAM("fk: " << fk.request);
+      ROS_WARN("****FK error %d", fk.response.error_code.val);
+      return;
+    }
+    if (fk.response.pose_stamped.size() != 1)
+    {
+      for (int i=0; i<fk.response.pose_stamped.size(); i++)
+      {
+        ROS_ERROR_STREAM("fk[" << i << "]:\n" << fk.response.pose_stamped[0]);
+      }
+    }
+    pose_stamped_ = fk.response.pose_stamped[0];
+  }
+  else
+  {
+    ROS_ERROR("Failed to call service /computte_fk");
+    return;
+  }
+}
+
+void JogFrameNodeAbs::follow_absolute_pose_thread() {
+  
+  // TODO parametrize
+  double rate = 5;
+  ros::Rate jogging_rate(rate);
+
+  while(ros::ok()) {
+    // TODO somehow validate that a target was set.
+    if(ref_msg_ != nullptr) {
+      if(ref_msg_->header.stamp.sec > 0 && ref_msg_->header.stamp.nsec > 0) {
+        jogStep(rate);
+      }
+    }
+    
+    jogging_rate.sleep();
+  }
+}
+
+void JogFrameNodeAbs::jogStep(double rate) {
+  // get the current pose, accessiable via pose_stamped_
+  getFkPose();
 
   // Solve inverse kinematics
   moveit_msgs::GetPositionIK ik;
 
-  ik.request.ik_request.group_name = msg->group_name;
-  ik.request.ik_request.ik_link_name = msg->link_name;
+  ik.request.ik_request.group_name = ref_msg_->group_name;
+  ik.request.ik_request.ik_link_name = ref_msg_->link_name;
   ik.request.ik_request.robot_state.joint_state = joint_state_;
-  ik.request.ik_request.avoid_collisions = msg->avoid_collisions;
+  ik.request.ik_request.avoid_collisions = ref_msg_->avoid_collisions;
   
   geometry_msgs::Pose act_pose = pose_stamped_.pose;
   geometry_msgs::PoseStamped ref_pose;
   
-  ref_pose.header.frame_id = msg->header.frame_id;
+  ref_pose.header.frame_id = ref_msg_->header.frame_id;
   ref_pose.header.stamp = ros::Time::now();
 
-  ref_pose.pose.position.x = msg->linear_abs.x;
-  ref_pose.pose.position.y = msg->linear_abs.y;
-  ref_pose.pose.position.z = msg->linear_abs.z;
+  // when the target pose is too far away, a pose with a max difference will be calculated directing
+  // the pose towards the target pose (basically linear interpolation).
+
+  double dirX = ref_msg_->linear_abs.x - pose_stamped_.pose.position.x;
+  double dirY = ref_msg_->linear_abs.y - pose_stamped_.pose.position.y;
+  double dirZ = ref_msg_->linear_abs.z - pose_stamped_.pose.position.z;
+  double dist = sqrt(((double)dirX*dirX) + ((double)dirY*dirY) + ((double)dirZ*dirZ));
+
+  //ROS_INFO_STREAM(dist);
+  //ROS_INFO_STREAM("DX: " << dirX << ", DY: " << dirY << ", DZ: " << dirZ);
+  //ROS_INFO_STREAM("PX: " << pose_stamped_.pose.position.x << ", PY: " << pose_stamped_.pose.position.y << ", PZ: " << pose_stamped_.pose.position.z);
+
+  if(dist < 0.005) {
+    return;
+  }
+
+  // check whether downscaling is necessary
+  // TODO parametrize
+  double threshold = 0.2 / rate;
+  if(dist > threshold) {
+    double nDirX = (dirX / dist) * threshold; 
+    double nDirY = (dirY / dist) * threshold; 
+    double nDirZ = (dirZ / dist) * threshold;
+    ref_pose.pose.position.x = pose_stamped_.pose.position.x + nDirX;
+    ref_pose.pose.position.y = pose_stamped_.pose.position.y + nDirY;
+    ref_pose.pose.position.z = pose_stamped_.pose.position.z + nDirZ;
+  }
+  else {
+    double nDirX = (dirX * 0.5); 
+    double nDirY = (dirY * 0.5); 
+    double nDirZ = (dirZ * 0.5);
+    ref_pose.pose.position.x = pose_stamped_.pose.position.x + nDirX;
+    ref_pose.pose.position.y = pose_stamped_.pose.position.y + nDirY;
+    ref_pose.pose.position.z = pose_stamped_.pose.position.z + nDirZ;
+  }
 
   // Apply orientation jog
   tf::Quaternion q_ref, q_act, q_jog;
   tf::quaternionMsgToTF(act_pose.orientation, q_act);
-  double angle = sqrt(msg->angular_delta.x*msg->angular_delta.x +
-                      msg->angular_delta.y*msg->angular_delta.y +
-                      msg->angular_delta.z*msg->angular_delta.z);
+  double angle = sqrt(ref_msg_->angular_delta.x*ref_msg_->angular_delta.x +
+                      ref_msg_->angular_delta.y*ref_msg_->angular_delta.y +
+                      ref_msg_->angular_delta.z*ref_msg_->angular_delta.z);
   tf::Vector3 axis(0,0,1);
   if (fabs(angle) < DBL_EPSILON)
   {
@@ -270,9 +336,9 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
   }
   else
   {
-    axis.setX(msg->angular_delta.x/angle);
-    axis.setY(msg->angular_delta.y/angle);
-    axis.setZ(msg->angular_delta.z/angle);
+    axis.setX(ref_msg_->angular_delta.x/angle);
+    axis.setY(ref_msg_->angular_delta.y/angle);
+    axis.setZ(ref_msg_->angular_delta.z/angle);
   }
   //ROS_INFO_STREAM("axis: " << axis.x() << ", " << axis.y() << ", " << axis.z());
   //ROS_INFO_STREAM("angle: " << angle);
@@ -294,8 +360,7 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
   {
     ROS_WARN("****IK error %d", ik.response.error_code.val);
     return;
-  }
-
+  } 
   // ROS_INFO_STREAM("ik response:\n" << ik.response);
   
   auto state = ik.response.solution.joint_state;
@@ -321,8 +386,13 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
   if (error > M_PI / 2)
   {
     ROS_ERROR_STREAM("**** Validation check Failed: " << error);
-    //return;
-  }
+    return;
+  } 
+
+  publishPose(state);
+}
+
+void JogFrameNodeAbs::publishPose(sensor_msgs::JointState state) {
   // Publish trajectory message for each controller
   for (auto it=cinfo_map_.begin(); it!=cinfo_map_.end(); it++)
   {
@@ -338,8 +408,8 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     for (int i=0; i<joint_names.size(); i++)
     {
       size_t index = std::distance(state.name.begin(),
-                                   std::find(state.name.begin(),
-                                             state.name.end(), joint_names[i]));
+                                  std::find(state.name.begin(),
+                                            state.name.end(), joint_names[i]));
       if (index == state.name.size())
       {
         ROS_WARN_STREAM("Cannot find joint " << joint_names[i] << " in IK solution");        
@@ -374,18 +444,6 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
       
       traj_pubs_[controller_name].publish(traj);
     }
-  }
-  // update pose_stamped_
-  pose_stamped_.pose = ref_pose.pose;
-  
-}
-
-void JogFrameNodeAbs::follow_absolute_pose_thread() {
-  ros::Rate jogging_rate(3);
-
-  while(ros::ok()) {
-    ROS_WARN("YEAH");
-    jogging_rate.sleep();
   }
 }
 
