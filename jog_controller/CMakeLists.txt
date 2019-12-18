@@ -80,6 +80,9 @@ endif()
 add_executable(jog_frame_node src/jog_frame_node.cpp)
 target_link_libraries(jog_frame_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
+add_executable(jog_frame_node_abs src/jog_frame_node_abs.cpp)
+target_link_libraries(jog_frame_node_abs ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+
 add_executable(jog_joint_node src/jog_joint_node.cpp)
 target_link_libraries(jog_joint_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 

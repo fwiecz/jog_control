@@ -24,3 +24,9 @@ geometry_msgs/Vector3 angular_delta
 # It uses avoid_collisions option of MoveIt! kinematics. If it is
 # true, the robot doesn't move if any collisions occured.
 bool avoid_collisions
+
+# Target position for the link to jog. Unit is probably in meter.
+geometry_msgs/Vector3 linear_abs
+
+# Target orientation for the link to jog. Unit is probably in radians.
+geometry_msgs/Vector3 angular_abs

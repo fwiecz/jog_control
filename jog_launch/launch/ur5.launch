@@ -5,6 +5,7 @@
   <arg name="use_joy" default="false"/>
   <arg name="use_action" default="false"/>
   <arg name="intermittent" default="false"/>
+  <arg name="absolute" default="false"/>
 
   <!-- Launch fake_joint_launch -->
   <include if="$(arg use_fake_joint)"
@@ -26,7 +27,15 @@
     <param name="use_action" value="$(arg use_action)"/>
     <param name="intermittent" value="$(arg intermittent)"/>
   </node>
-  <node name="jog_frame_node" pkg="jog_controller" type="jog_frame_node">
+
+  <node name="jog_frame_node" pkg="jog_controller" type="jog_frame_node"
+  if="$(eval absolute == false)">
+    <param name="use_action" value="$(arg use_action)"/>
+    <param name="intermittent" value="$(arg intermittent)"/>
+  </node>
+
+  <node name="jog_frame_node_abs" pkg="jog_controller" type="jog_frame_node_abs"
+  if="$(eval absolute == true)" output="screen">
     <param name="use_action" value="$(arg use_action)"/>
     <param name="intermittent" value="$(arg intermittent)"/>
   </node>
