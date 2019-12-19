@@ -43,7 +43,7 @@ class joy_to_jog_frame:
             msg.angular_delta.x = self.scale_angular['x']*joy.axes[self.axis_angular['x']]
             msg.angular_delta.y = self.scale_angular['y']*joy.axes[self.axis_angular['y']]
             msg.angular_delta.z = self.scale_angular['z']*joy.axes[self.axis_angular['z']]
-        else:
+        if joy.buttons[self.enable_button]:
             # These buttons are binary
             msg.linear_delta.x = self.scale_linear['x']*joy.axes[self.axis_linear['x']]
             msg.linear_delta.y = self.scale_linear['y']*joy.axes[self.axis_linear['y']]
