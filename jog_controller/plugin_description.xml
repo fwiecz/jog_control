@@ -8,6 +8,14 @@
     </description>
   </class>
 
+  <class name="jog_controller/JogFramePanel (absolute)"
+         type="jog_controller::JogFramePanelAbs"
+         base_class_type="rviz::Panel">
+    <description>
+      A panel widget for absolute frame jogging
+    </description>
+  </class>
+
   <class name="jog_controller/JogJointPanel"
          type="jog_controller::JogJointPanel"
          base_class_type="rviz::Panel">
@@ -15,5 +23,6 @@
       A panel widget for joint jog interface
     </description>
   </class>
+
 
 </library>
