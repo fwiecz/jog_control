@@ -14,6 +14,7 @@
 #include <control_msgs/FollowJointTrajectoryAction.h>
 #include <actionlib/client/simple_action_client.h>
 #include <trajectory_msgs/JointTrajectoryPoint.h>
+#include <interactive_markers/interactive_marker_server.h>
 
 typedef actionlib::SimpleActionClient < control_msgs::FollowJointTrajectoryAction > TrajClient;
 
@@ -46,6 +47,8 @@ public:
   void getFkPose();
   void jogStep(double rate);
   void publishPose(sensor_msgs::JointState state);
+  void initInteractiveMarkers();
+  void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
 protected:
   ros::Subscriber joint_state_sub_, jog_frame_sub_;
   ros::ServiceClient fk_client_, ik_client_;
@@ -60,6 +63,7 @@ protected:
   double time_from_start_;
   bool use_action_;
   bool intermittent_;
+  interactive_markers::InteractiveMarkerServer* server_;
 
   jog_msgs::JogFrameConstPtr ref_msg_;
 

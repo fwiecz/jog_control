@@ -87,6 +87,9 @@ target_link_libraries(jog_frame_node_abs ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 add_executable(jog_joint_node src/jog_joint_node.cpp)
 target_link_libraries(jog_joint_node ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
+add_executable(jog_frame_abs_interactive_marker script/jog_frame_abs_interactive_marker.cpp)
+target_link_libraries(jog_frame_abs_interactive_marker ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+
 install(TARGETS jog_frame_node jog_joint_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
