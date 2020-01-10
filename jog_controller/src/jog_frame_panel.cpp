@@ -259,7 +259,6 @@ void JogFramePanel::updateTargetLink()
   target_link_id_ = target_link_cbox_->currentText().toStdString();
 }
 
-
 void JogFramePanel::publish()
 {
   boost::mutex::scoped_lock lock(mutex_);

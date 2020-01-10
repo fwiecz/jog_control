@@ -48,10 +48,12 @@ public:
   void jogStep(double rate);
   void publishPose(sensor_msgs::JointState state);
   void initInteractiveMarkers();
+  void resetInteractiveMarker();
   void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
 protected:
   ros::Subscriber joint_state_sub_, jog_frame_sub_;
   ros::ServiceClient fk_client_, ik_client_;
+  ros::Publisher jog_frame_abs_pub_;
 
   std::map<std::string, Controller> cinfo_map_;
   std::map<std::string, TrajClient*> traj_clients_;
@@ -66,9 +68,13 @@ protected:
   interactive_markers::InteractiveMarkerServer* server_;
 
   jog_msgs::JogFrameConstPtr ref_msg_;
+  jog_msgs::JogFrame marker_msg_;
+  visualization_msgs::InteractiveMarker* int_marker_;
 
   std::string target_link_;
   std::string group_name_;
+  std::string frame_id_;
+  bool avoid_collisions_;
   std::vector<std::string> exclude_joints_;
   sensor_msgs::JointState joint_state_;
   ros::Time last_stamp_;

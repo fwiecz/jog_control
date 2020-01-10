@@ -17,6 +17,8 @@ class JogFramePanelAbs : public rviz::Panel
     Q_OBJECT
     public:
         JogFramePanelAbs(QWidget* parent = 0);
+        QLayout* initUi(QWidget* parent);
+        void updateFrame(QComboBox* frameCb);
         virtual void onInitialize();
         virtual void load(const rviz::Config& config);
         virtual void save(rviz::Config config) const;
@@ -25,10 +27,13 @@ class JogFramePanelAbs : public rviz::Panel
         void update();
     
     protected:
-        QPushButton* enable_button_;
-        QPushButton* reset_pose_button_;
+        std::vector<std::string> group_names_;
+        std::vector<std::string> link_names_;
+        std::string frame_id_;
+        std::string target_link_id_;
+        QComboBox* frame_cb_;
         interactive_markers::InteractiveMarkerServer* m_server_;
-        
+        ros::Publisher* marker_pub_;
 };
 
 }

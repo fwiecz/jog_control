@@ -7,76 +7,6 @@
 
 namespace jog_frame {
 
-int JogFrameNodeAbs::get_controller_list()
-{
-  ros::NodeHandle gnh;
-
-  // Get controller information from move_group/controller_list
-  if (!gnh.hasParam("move_group/controller_list"))
-  {
-    ROS_ERROR_STREAM("move_group/controller_list is not specified.");
-    return -1;
-  }
-  XmlRpc::XmlRpcValue controller_list;
-  gnh.getParam("move_group/controller_list", controller_list);
-  for (int i = 0; i < controller_list.size(); i++)
-  {
-    if (!controller_list[i].hasMember("name"))
-    {
-      ROS_ERROR("name must be specifed for each controller.");
-      return -1;
-    }
-    if (!controller_list[i].hasMember("joints"))
-    {
-      ROS_ERROR("joints must be specifed for each controller.");
-      return -1;
-    }
-    try
-    {
-      // get name member
-      std::string name = std::string(controller_list[i]["name"]);
-      // get action_ns member if exists
-      std::string action_ns = std::string("");
-      if (controller_list[i].hasMember("action_ns"))
-      {
-        action_ns = std::string(controller_list[i]["action_ns"]);
-      }
-      // get joints member
-      if (controller_list[i]["joints"].getType() != XmlRpc::XmlRpcValue::TypeArray)
-      {
-        ROS_ERROR_STREAM("joints for controller " << name << " is not specified as an array");
-        return -1;
-      }
-      auto joints = controller_list[i]["joints"];
-      // Get type member
-      std::string type = std::string("FollowJointTrajectory");
-      if (!controller_list[i].hasMember("type"))
-      {
-        ROS_WARN_STREAM("type is not specifed for controller " << name << ", using default FollowJointTrajectory");
-      }
-      type = std::string(controller_list[i]["type"]);
-      if (type != "FollowJointTrajectory")
-      {
-        ROS_ERROR_STREAM("controller type " << type << " is not supported");
-        return -1;
-      }
-      // Create controller map
-      cinfo_map_[name].action_ns = action_ns;
-      cinfo_map_[name].joints.resize(joints.size());
-      for (int j = 0; j < cinfo_map_[name].joints.size(); ++j)
-      {
-        cinfo_map_[name].joints[j] = std::string(joints[j]);
-      }
-    }
-    catch (...)
-    {
-      ROS_ERROR_STREAM("Caught unknown exception while parsing controller information");
-      return -1;
-    }
-  }
-  return 0;
-}
-
 JogFrameNodeAbs::JogFrameNodeAbs()
 {
   ros::NodeHandle gnh, pnh("~");
@@ -84,11 +14,22 @@ JogFrameNodeAbs::JogFrameNodeAbs()
   ROS_WARN("Absolute mode enabled!");
   initInteractiveMarkers();
 
-  pnh.param<std::string>("target_link", target_link_, "link_6");
-  pnh.param<std::string>("group", group_name_);
+  //pnh.param<std::string>("target_link", target_link_, "link_6");
+  //pnh.param<std::string>("group", group_name_);
   pnh.param<double>("time_from_start", time_from_start_, 0.5);
   pnh.param<bool>("use_action", use_action_, false);
   pnh.param<bool>("intermittent", intermittent_, false);
+
+  std::vector<std::string> group_names;
+  gnh.getParam("/jog_frame_node/group_names", group_names);
+  group_name_ = group_names.size() > 0 ? group_names[0] : "";
+
+  std::vector<std::string> link_names;
+  gnh.getParam("/jog_frame_node/link_names", link_names);
+  target_link_ = link_names.size() > 0 ? link_names[0] : "";
+
+  jog_frame_abs_pub_ = gnh.advertise<jog_msgs::JogFrame>( "jog_frame", 1);
+  avoid_collisions_ = true;
 
   if (not use_action_ && intermittent_)
   {
@@ -160,27 +101,55 @@ JogFrameNodeAbs::JogFrameNodeAbs()
     }
   }
 
+  // Set the marker to the end effectors pose
+  resetInteractiveMarker();
+
   // Create seperate thread for continous jogging towards the target position.
   boost::thread worker_thread(&JogFrameNodeAbs::follow_absolute_pose_thread, this); 
 }
 
+void JogFrameNodeAbs::resetInteractiveMarker()
+{
+  ROS_WARN("Reset Interactive marker!");
+  getFkPose();
+  // ROS_INFO_STREAM("Pose(x: " << act_pose.position.x << ", y: " << act_pose.position.y << ", z: " << act_pose.position.z);
+  server_->setPose(int_marker_->name, pose_stamped_.pose);
+  server_->applyChanges();
+}
+
 void JogFrameNodeAbs::interactiveMarkerFeedback(
-    const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback) {
-      
-      
+    const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback)
+{
+  // reset the marker to the endeffectors position when mouse_up
+  if(feedback->event_type == feedback->MOUSE_UP) {
+    ref_msg_ = jog_msgs::JogFrameConstPtr();
+    marker_msg_.header.stamp = ros::Time(0, 0);
+    resetInteractiveMarker();
+  }
+  else {
+    marker_msg_.header.stamp = ros::Time::now();
+    marker_msg_.header.frame_id = frame_id_;
+    marker_msg_.group_name = group_name_;
+    marker_msg_.link_name = target_link_;
+    marker_msg_.avoid_collisions = true;
+    marker_msg_.linear_abs.x = feedback->pose.position.x;
+    marker_msg_.linear_abs.y = feedback->pose.position.y;
+    marker_msg_.linear_abs.z = feedback->pose.position.z;
+    marker_msg_.angular_abs.x = feedback->pose.orientation.x;
+  }
 }
 
 void JogFrameNodeAbs::initInteractiveMarkers() 
 {
-  server_ = new interactive_markers::InteractiveMarkerServer("jog_frame_node_abs", "", true);
+  server_ = new interactive_markers::InteractiveMarkerServer("jog_frame_node_abs", "", false);
 
   // create an interactive marker for our server
-  visualization_msgs::InteractiveMarker int_marker;
-  int_marker.header.frame_id = "base_link";
+  int_marker_ = new visualization_msgs::InteractiveMarker();
+  int_marker_->header.frame_id = "base_link";
   //int_marker.header.stamp=ros::Time::now();
-  int_marker.name = "jog_frame_marker";
-  int_marker.description = "3-DOF Jogging Control";
-  int_marker.scale = 0.15;
+  int_marker_->name = "jog_frame_marker";
+  int_marker_->description = "3-DOF Jogging Control";
+  int_marker_->scale = 0.15;
 
   // create a marker
   visualization_msgs::Marker marker;
@@ -200,7 +169,7 @@ void JogFrameNodeAbs::initInteractiveMarkers()
   marker_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_3D; 
 
   // add the control to the interactive marker
-  int_marker.controls.push_back( marker_control );
+  int_marker_->controls.push_back( marker_control );
 
   // create a control which will move the box
   // this control does not contain any markers,
@@ -212,9 +181,9 @@ void JogFrameNodeAbs::initInteractiveMarkers()
   arrow_control.orientation.y = 0;
   arrow_control.orientation.z = 0;
   arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-  int_marker.controls.push_back(arrow_control);
+  int_marker_->controls.push_back(arrow_control);
   arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-  int_marker.controls.push_back(arrow_control);
+  int_marker_->controls.push_back(arrow_control);
 
   arrow_control.name = "move_y";
   arrow_control.orientation.w = 1;
@@ -222,9 +191,9 @@ void JogFrameNodeAbs::initInteractiveMarkers()
   arrow_control.orientation.y = 1;
   arrow_control.orientation.z = 0;
   arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-  int_marker.controls.push_back(arrow_control);
+  int_marker_->controls.push_back(arrow_control);
   arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-  int_marker.controls.push_back(arrow_control);
+  int_marker_->controls.push_back(arrow_control);
 
   arrow_control.name = "move_z";
   arrow_control.orientation.w = 1;
@@ -232,17 +201,17 @@ void JogFrameNodeAbs::initInteractiveMarkers()
   arrow_control.orientation.y = 0;
   arrow_control.orientation.z = 1;
   arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-  int_marker.controls.push_back(arrow_control);
+  int_marker_->controls.push_back(arrow_control);
   arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-  int_marker.controls.push_back(arrow_control);
+  int_marker_->controls.push_back(arrow_control);
 
   // add the control to the interactive marker
-  int_marker.pose.position.z = 1;
+  int_marker_->pose.position.z = 1;
 
   // add the interactive marker to our collection &
   // tell the server to call processMarkerFeedback() when feedback arrives for it
-  server_->insert(int_marker);
-  server_->setCallback(int_marker.name, boost::bind(&JogFrameNodeAbs::interactiveMarkerFeedback, this, _1));
+  server_->insert(*int_marker_);
+  server_->setCallback(int_marker_->name, boost::bind(&JogFrameNodeAbs::interactiveMarkerFeedback, this, _1));
   server_->applyChanges();
 
   ROS_WARN_STREAM("Interactive Marker initialized: " << server_->size());
@@ -270,23 +239,30 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     }    
   }
   // Update reference frame only if the stamp is older than last_stamp_ + time_from_start_
-  if (msg->header.stamp > last_stamp_ + ros::Duration(time_from_start_))
+  if (msg->header.stamp > last_stamp_ ) //+ ros::Duration(time_from_start_))
   {
     // update our reference message for the secondary thread
+    frame_id_ = msg->header.frame_id;
+    group_name_ = msg->group_name;
+    target_link_ = msg->link_name;
+    avoid_collisions_ = msg->avoid_collisions;
     ref_msg_ = msg;
   }  
   // Update timestamp of the last jog command
   last_stamp_ = msg->header.stamp;
-
-  // update pose_stamped_
-  //pose_stamped_.pose = ref_pose.pose;  
 }
 
+/**
+ * @brief get the current pose of the endeffector. Accessible via pose_stamped_
+ */
 void JogFrameNodeAbs::getFkPose() {
   joint_state_.name.clear();
   joint_state_.position.clear();
   joint_state_.velocity.clear();
   joint_state_.effort.clear();
+
+  //ROS_INFO_STREAM("targetlink: " << target_link_ << "\n" << "frame_id: " << frame_id_ << "\n" << "group_name: " << group_name_);
+  
   for (auto it=joint_map_.begin(); it!=joint_map_.end(); it++)
   {
     // Exclude joint in exclude_joints_
@@ -306,10 +282,10 @@ void JogFrameNodeAbs::getFkPose() {
   // Update forward kinematics
   moveit_msgs::GetPositionFK fk;
 
-  fk.request.header.frame_id = ref_msg_->header.frame_id;
+  fk.request.header.frame_id = frame_id_;
   fk.request.header.stamp = ros::Time::now();
   fk.request.fk_link_names.clear();
-  fk.request.fk_link_names.push_back(ref_msg_->link_name);
+  fk.request.fk_link_names.push_back(target_link_);
   fk.request.robot_state.joint_state = joint_state_;
 
   if (fk_client_.call(fk))
@@ -336,6 +312,9 @@ void JogFrameNodeAbs::getFkPose() {
   }
 }
 
+/**
+ * Worker thread for calulation
+ */
 void JogFrameNodeAbs::follow_absolute_pose_thread() {
   
   // TODO parametrize
@@ -344,10 +323,22 @@ void JogFrameNodeAbs::follow_absolute_pose_thread() {
 
   while(ros::ok()) {
     // TODO somehow validate that a target was set.
+    ROS_INFO("\n===== Worker Thread Start =====");
     if(ref_msg_ != nullptr) {
+      double targetx = ref_msg_->linear_abs.x;
+      double targety = ref_msg_->linear_abs.y;
+      double targetz = ref_msg_->linear_abs.z;
+      ROS_WARN_STREAM("Target(x: " << targetx << ", y: " << targety << ", z: " << targetz << ")");
+
       if(ref_msg_->header.stamp.sec > 0 && ref_msg_->header.stamp.nsec > 0) {
+        ROS_INFO(" JogStep");
         jogStep(rate);
       }
+    }
+    if(marker_msg_.header.stamp.sec > 0 && marker_msg_.header.stamp.nsec > 0) {
+      ROS_INFO("Publish marker");
+      marker_msg_.header.stamp = ros::Time::now();
+      jog_frame_abs_pub_.publish(marker_msg_);
     }
     
     jogging_rate.sleep();
@@ -361,10 +352,10 @@ void JogFrameNodeAbs::jogStep(double rate) {
   // Solve inverse kinematics
   moveit_msgs::GetPositionIK ik;
 
-  ik.request.ik_request.group_name = ref_msg_->group_name;
-  ik.request.ik_request.ik_link_name = ref_msg_->link_name;
+  ik.request.ik_request.group_name = group_name_;
+  ik.request.ik_request.ik_link_name = target_link_;
   ik.request.ik_request.robot_state.joint_state = joint_state_;
-  ik.request.ik_request.avoid_collisions = ref_msg_->avoid_collisions;
+  ik.request.ik_request.avoid_collisions = avoid_collisions_;
   
   geometry_msgs::Pose act_pose = pose_stamped_.pose;
   geometry_msgs::PoseStamped ref_pose;
@@ -375,15 +366,12 @@ void JogFrameNodeAbs::jogStep(double rate) {
   // when the target pose is too far away, a pose with a max difference will be calculated directing
   // the pose towards the target pose (basically linear interpolation).
 
-  double dirX = ref_msg_->linear_abs.x - pose_stamped_.pose.position.x;
-  double dirY = ref_msg_->linear_abs.y - pose_stamped_.pose.position.y;
-  double dirZ = ref_msg_->linear_abs.z - pose_stamped_.pose.position.z;
+  double dirX = ref_msg_->linear_abs.x - act_pose.position.x;
+  double dirY = ref_msg_->linear_abs.y - act_pose.position.y;
+  double dirZ = ref_msg_->linear_abs.z - act_pose.position.z;
   double dist = sqrt(((double)dirX*dirX) + ((double)dirY*dirY) + ((double)dirZ*dirZ));
 
-  //ROS_INFO_STREAM(dist);
-  //ROS_INFO_STREAM("DX: " << dirX << ", DY: " << dirY << ", DZ: " << dirZ);
-  //ROS_INFO_STREAM("PX: " << pose_stamped_.pose.position.x << ", PY: " << pose_stamped_.pose.position.y << ", PZ: " << pose_stamped_.pose.position.z);
-
+  // do not jog any further, this is close enough
   if(dist < 0.005) {
     return;
   }
@@ -551,6 +539,76 @@ void JogFrameNodeAbs::joint_state_cb(sensor_msgs::JointStateConstPtr msg)
   }
 }
 
+int JogFrameNodeAbs::get_controller_list()
+{
+  ros::NodeHandle gnh;
+
+  // Get controller information from move_group/controller_list
+  if (!gnh.hasParam("move_group/controller_list"))
+  {
+    ROS_ERROR_STREAM("move_group/controller_list is not specified.");
+    return -1;
+  }
+  XmlRpc::XmlRpcValue controller_list;
+  gnh.getParam("move_group/controller_list", controller_list);
+  for (int i = 0; i < controller_list.size(); i++)
+  {
+    if (!controller_list[i].hasMember("name"))
+    {
+      ROS_ERROR("name must be specifed for each controller.");
+      return -1;
+    }
+    if (!controller_list[i].hasMember("joints"))
+    {
+      ROS_ERROR("joints must be specifed for each controller.");
+      return -1;
+    }
+    try
+    {
+      // get name member
+      std::string name = std::string(controller_list[i]["name"]);
+      // get action_ns member if exists
+      std::string action_ns = std::string("");
+      if (controller_list[i].hasMember("action_ns"))
+      {
+        action_ns = std::string(controller_list[i]["action_ns"]);
+      }
+      // get joints member
+      if (controller_list[i]["joints"].getType() != XmlRpc::XmlRpcValue::TypeArray)
+      {
+        ROS_ERROR_STREAM("joints for controller " << name << " is not specified as an array");
+        return -1;
+      }
+      auto joints = controller_list[i]["joints"];
+      // Get type member
+      std::string type = std::string("FollowJointTrajectory");
+      if (!controller_list[i].hasMember("type"))
+      {
+        ROS_WARN_STREAM("type is not specifed for controller " << name << ", using default FollowJointTrajectory");
+      }
+      type = std::string(controller_list[i]["type"]);
+      if (type != "FollowJointTrajectory")
+      {
+        ROS_ERROR_STREAM("controller type " << type << " is not supported");
+        return -1;
+      }
+      // Create controller map
+      cinfo_map_[name].action_ns = action_ns;
+      cinfo_map_[name].joints.resize(joints.size());
+      for (int j = 0; j < cinfo_map_[name].joints.size(); ++j)
+      {
+        cinfo_map_[name].joints[j] = std::string(joints[j]);
+      }
+    }
+    catch (...)
+    {
+      ROS_ERROR_STREAM("Caught unknown exception while parsing controller information");
+      return -1;
+    }
+  }
+  return 0;
+}
+
 } // namespace jog_frame
 
 /**
@@ -560,7 +618,7 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "jog_frame_node_abs");
   jog_frame::JogFrameNodeAbs node;
-  ros::Rate loop_rate(20);
+  ros::Rate loop_rate(10);
   
   while ( ros::ok() )
   {
