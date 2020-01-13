@@ -4,6 +4,7 @@
 #include <string>
 #include <ros/ros.h>
 #include <tf/tf.h>
+#include <mutex>
 #include <jog_msgs/JogFrame.h>
 #include <sensor_msgs/JointState.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
@@ -61,6 +62,7 @@ protected:
 
   std::map<std::string, double> joint_map_;
   geometry_msgs::PoseStamped pose_stamped_;
+  std::mutex pose_stamped_mutex_;
 
   double time_from_start_;
   bool use_action_;
@@ -68,8 +70,11 @@ protected:
   interactive_markers::InteractiveMarkerServer* server_;
 
   jog_msgs::JogFrameConstPtr ref_msg_;
+  std::mutex ref_msg_mutex_;
+
   jog_msgs::JogFrame marker_msg_;
   visualization_msgs::InteractiveMarker* int_marker_;
+  std::mutex marker_msg_mutex_;
 
   std::string target_link_;
   std::string group_name_;
