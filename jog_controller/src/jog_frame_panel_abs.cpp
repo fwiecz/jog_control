@@ -40,6 +40,8 @@ void JogFramePanelAbs::onInitialize()
 {
     connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
     updateFrame(frame_cb_);
+
+    resetInteractiveMarker();
     
     // initialize repeating timer
     QTimer* timer = new QTimer( this );
@@ -73,8 +75,8 @@ geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
     try{
         geometry_msgs::Transform transform = tf->lookupTransform(frame_id_, target_link_, ros::Time(0)).transform;
         geometry_msgs::Pose* pose = new geometry_msgs::Pose();
-        pose->position.x = -transform.translation.x;
-        pose->position.y = -transform.translation.y;
+        pose->position.x = transform.translation.x;
+        pose->position.y = transform.translation.y;
         pose->position.z = transform.translation.z;
         return pose;
     }
@@ -82,6 +84,15 @@ geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
         ROS_ERROR("%s",ex.what());
     }
     return nullptr;
+}
+
+void JogFramePanelAbs::resetInteractiveMarker()
+{
+    geometry_msgs::Pose markerPose = geometry_msgs::Pose(*getTargetLinkPose());
+    markerPose.position.x = -markerPose.position.x;
+    markerPose.position.y = -markerPose.position.y;
+    server_->setPose(int_marker_->name, markerPose);
+    server_->applyChanges();
 }
 
 void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback)
@@ -93,11 +104,14 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
         if(feedback->event_type == feedback->MOUSE_UP) 
         {
             on_publish_marker_ = false;
-            
+            resetInteractiveMarker();
             geometry_msgs::Pose* pose = getTargetLinkPose();
 
             if(pose != nullptr) {
-                server_->setPose(int_marker_->name, *pose);
+                geometry_msgs::Pose markerPose = geometry_msgs::Pose(*pose);
+                markerPose.position.x = -markerPose.position.x;
+                markerPose.position.y = -markerPose.position.y;
+                server_->setPose(int_marker_->name, markerPose);
                 server_->applyChanges();
                 // tell target link to stay where it is
                 marker_msg_.header.stamp = ros::Time::now();
@@ -105,13 +119,16 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
                 marker_msg_.group_name = group_name_;
                 marker_msg_.link_name = target_link_;
                 marker_msg_.avoid_collisions = avoid_collisions_;
-                marker_msg_.linear_abs.x =  -pose->position.x;
-                marker_msg_.linear_abs.y =  -pose->position.y;
+                marker_msg_.linear_abs.x =  pose->position.x;
+                marker_msg_.linear_abs.y =  pose->position.y;
                 marker_msg_.linear_abs.z =  pose->position.z;
                 marker_msg_.angular_abs.x = pose->orientation.x;
                 marker_msg_.angular_abs.y = pose->orientation.y;
                 marker_msg_.angular_abs.z = pose->orientation.z;
-                jog_frame_abs_pub_.publish(marker_msg_);
+                
+                if(master_on_publish_) {
+                    jog_frame_abs_pub_.publish(marker_msg_);
+                }
             }
         }
         else 
@@ -125,7 +142,7 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
             marker_msg_.group_name = group_name_;
             marker_msg_.link_name = target_link_;
             marker_msg_.avoid_collisions = avoid_collisions_;
-            // For some reason, x and y axis are mirrored
+            // For some reason when dealing with markers x and y axis are mirrored
             marker_msg_.linear_abs.x = -feedback->pose.position.x;
             marker_msg_.linear_abs.y = -feedback->pose.position.y;
             marker_msg_.linear_abs.z = feedback->pose.position.z;

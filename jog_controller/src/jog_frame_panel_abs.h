@@ -27,6 +27,7 @@ class JogFramePanelAbs : public rviz::Panel
         void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
         void update();
         geometry_msgs::Pose* getTargetLinkPose();
+        void resetInteractiveMarker();
     protected Q_SLOTS:
         void respondOnOffCb(bool isChecked);
     
