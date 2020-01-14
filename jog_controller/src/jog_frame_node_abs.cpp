@@ -12,7 +12,6 @@ JogFrameNodeAbs::JogFrameNodeAbs()
   ros::NodeHandle gnh, pnh("~");
 
   ROS_WARN("Absolute mode enabled!");
-  initInteractiveMarkers();
 
   //pnh.param<std::string>("target_link", target_link_, "link_6");
   //pnh.param<std::string>("group", group_name_);
@@ -101,9 +100,6 @@ JogFrameNodeAbs::JogFrameNodeAbs()
     }
   }
 
-  // Set the marker to the end effectors pose
-  resetInteractiveMarker();
-
   // Create seperate thread for continous jogging towards the target position.
   boost::thread worker_thread(&JogFrameNodeAbs::follow_absolute_pose_thread, this); 
 }
@@ -141,6 +137,7 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     std::lock_guard<std::mutex> guard_ref_msg(ref_msg_mutex_);
     //ROS_INFO("mutex 1");
     ref_msg_ = msg;
+    ROS_INFO("Got frame_msg");
   }  
   // Update timestamp of the last jog command
   last_stamp_ = msg->header.stamp;
@@ -162,16 +159,6 @@ void JogFrameNodeAbs::follow_absolute_pose_thread() {
         jogStep(rate);
       }
     }
-    
-    if(marker_msg_.header.stamp.sec > 0 && marker_msg_.header.stamp.nsec > 0) {
-      //ROS_WARN("req mutex 3");
-      std::lock_guard<std::mutex> guard_marker_msg(marker_msg_mutex_);
-      //ROS_INFO("mutex 3");
-      // ROS_INFO("Publish marker");
-      marker_msg_.header.stamp = ros::Time::now();
-      jog_frame_abs_pub_.publish(marker_msg_);
-    }
-    
     jogging_rate.sleep();
   }
 }
@@ -277,14 +264,15 @@ void JogFrameNodeAbs::jogStep(double rate)
   // check whether downscaling is necessary
   // TODO parametrize
   double threshold = 0.2;
+  double decFactor = 0.75;
   if(dist > threshold) {
     dirX = (dirX / dist) * threshold; 
     dirY = (dirY / dist) * threshold; 
     dirZ = (dirZ / dist) * threshold;
   }
-  double nDirX = (dirX * 0.5); 
-  double nDirY = (dirY * 0.5); 
-  double nDirZ = (dirZ * 0.5);
+  double nDirX = (dirX * decFactor); 
+  double nDirY = (dirY * decFactor); 
+  double nDirZ = (dirZ * decFactor);
   ref_pose.pose.position.x = pose_stamped_.pose.position.x + nDirX;
   ref_pose.pose.position.y = pose_stamped_.pose.position.y + nDirY;
   ref_pose.pose.position.z = pose_stamped_.pose.position.z + nDirZ;
@@ -423,161 +411,12 @@ void JogFrameNodeAbs::joint_state_cb(sensor_msgs::JointStateConstPtr msg)
     return;
   }
   // Update joint information
+  ROS_INFO("joint states");
   for (int i=0; i<msg->name.size(); i++)
   {
+    std::cout << msg->name[i] << ": " << msg->position[i] << "\n";
     joint_map_[msg->name[i]] = msg->position[i];
   }
-}
-
-
-void JogFrameNodeAbs::resetInteractiveMarker()
-{
-  getFkPose();
-  //ROS_WARN("req mutex 6");
-  std::lock_guard<std::mutex> guard_pose_stamped(pose_stamped_mutex_);
-  //ROS_INFO("mutex 6");
-  geometry_msgs::Pose act_pose = pose_stamped_.pose;
-  server_->setPose(int_marker_->name, pose_stamped_.pose);
-  server_->applyChanges();
-}
-
-void JogFrameNodeAbs::interactiveMarkerFeedback(
-    const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback)
-{
-  if(feedback != nullptr) {
-    // reset the marker to the endeffectors position when mouse_up and stop the end effector
-    // from moving by setting ref_msg_ to it's actual pose.
-    if(feedback->event_type == feedback->MOUSE_UP) {
-      
-      //ROS_WARN("req mutex 7");
-      std::lock_guard<std::mutex> guard_marker_msg(marker_msg_mutex_);
-      //ROS_INFO("mutex 7");
-      marker_msg_.header.stamp = ros::Time(0, 0);
-      //resetInteractiveMarker();
-
-      jog_msgs::JogFrame* reset_ref_msg = new jog_msgs::JogFrame();
-      reset_ref_msg->header.stamp = ros::Time::now();
-      reset_ref_msg->header.frame_id = frame_id_;
-      reset_ref_msg->group_name = group_name_;
-      reset_ref_msg->avoid_collisions = true;
-
-      //ROS_WARN("req mutex 8");
-      std::lock_guard<std::mutex> guard_pose_stamped(pose_stamped_mutex_);
-      //ROS_INFO("mutex 8");
-      reset_ref_msg->linear_abs.x = pose_stamped_.pose.position.x;
-      reset_ref_msg->linear_abs.y = pose_stamped_.pose.position.y;
-      reset_ref_msg->linear_abs.z = pose_stamped_.pose.position.z;
-      reset_ref_msg->angular_abs.x = pose_stamped_.pose.orientation.x;
-      reset_ref_msg->angular_abs.y = pose_stamped_.pose.orientation.y;
-      reset_ref_msg->angular_abs.z = pose_stamped_.pose.orientation.z;
-
-      //ROS_WARN("req mutex 9");
-      std::lock_guard<std::mutex> guard_ref_msg(ref_msg_mutex_);
-      geometry_msgs::Pose ref_pose;
-      ref_pose.position.x = ref_msg_->linear_abs.x;
-      ref_pose.position.y = ref_msg_->linear_abs.y;
-      ref_pose.position.z = ref_msg_->linear_abs.z;
-      server_->setPose(int_marker_->name, ref_pose);
-      server_->applyChanges();
-
-      //ROS_INFO("mutex 9");
-      //ref_msg_ = jog_msgs::JogFrameConstPtr(reset_ref_msg);
-    }
-    else {
-      //ROS_WARN("req mutex 10");
-      std::lock_guard<std::mutex> guard_marker_msg(marker_msg_mutex_);
-      //ROS_INFO("mutex 10");
-      marker_msg_.header.stamp = ros::Time::now();
-      marker_msg_.header.frame_id = frame_id_;
-      marker_msg_.group_name = group_name_;
-      marker_msg_.link_name = target_link_;
-      marker_msg_.avoid_collisions = true;
-      marker_msg_.linear_abs.x = feedback->pose.position.x;
-      marker_msg_.linear_abs.y = feedback->pose.position.y;
-      marker_msg_.linear_abs.z = feedback->pose.position.z;
-      marker_msg_.angular_abs.x = feedback->pose.orientation.x;
-      marker_msg_.angular_abs.y = feedback->pose.orientation.y;
-      marker_msg_.angular_abs.z = feedback->pose.orientation.z;
-    }
-  }
-}
-
-void JogFrameNodeAbs::initInteractiveMarkers() 
-{
-  server_ = new interactive_markers::InteractiveMarkerServer("jog_frame_node_abs", "", true);
-
-  // create an interactive marker for our server
-  int_marker_ = new visualization_msgs::InteractiveMarker();
-  int_marker_->header.frame_id = "base_link";
-  //int_marker.header.stamp=ros::Time::now();
-  int_marker_->name = "jog_frame_marker";
-  int_marker_->description = "3-DOF Jogging Control";
-  int_marker_->scale = 0.15;
-
-  // create a marker
-  visualization_msgs::Marker marker;
-  marker.type = visualization_msgs::Marker::SPHERE;
-  marker.scale.x = 0.075;
-  marker.scale.y = 0.075;
-  marker.scale.z = 0.075;
-  marker.color.r = 1.0;
-  marker.color.g = 0.5;
-  marker.color.b = 0.0;
-  marker.color.a = 1.0;
-
-  // create a non-interactive control which contains the box
-  visualization_msgs::InteractiveMarkerControl marker_control;
-  marker_control.always_visible = true;
-  marker_control.markers.push_back( marker );
-  marker_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_3D; 
-
-  // add the control to the interactive marker
-  int_marker_->controls.push_back( marker_control );
-
-  // create a control which will move the box
-  // this control does not contain any markers,
-  // which will cause RViz to insert two arrows
-  visualization_msgs::InteractiveMarkerControl arrow_control;
-  arrow_control.name = "move_x";
-  arrow_control.orientation.w = 1;
-  arrow_control.orientation.x = 1;
-  arrow_control.orientation.y = 0;
-  arrow_control.orientation.z = 0;
-  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-  int_marker_->controls.push_back(arrow_control);
-  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-  int_marker_->controls.push_back(arrow_control);
-
-  arrow_control.name = "move_y";
-  arrow_control.orientation.w = 1;
-  arrow_control.orientation.x = 0;
-  arrow_control.orientation.y = 1;
-  arrow_control.orientation.z = 0;
-  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-  int_marker_->controls.push_back(arrow_control);
-  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-  int_marker_->controls.push_back(arrow_control);
-
-  arrow_control.name = "move_z";
-  arrow_control.orientation.w = 1;
-  arrow_control.orientation.x = 0;
-  arrow_control.orientation.y = 0;
-  arrow_control.orientation.z = 1;
-  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
-  int_marker_->controls.push_back(arrow_control);
-  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
-  int_marker_->controls.push_back(arrow_control);
-
-  // add the control to the interactive marker
-  int_marker_->pose.position.z = 1;
-
-  // add the interactive marker to our collection &
-  // tell the server to call processMarkerFeedback() when feedback arrives for it
-  server_->insert(*int_marker_);
-  server_->setCallback(int_marker_->name, boost::bind(&JogFrameNodeAbs::interactiveMarkerFeedback, this, _1));
-  server_->applyChanges();
-
-  ROS_WARN_STREAM("Interactive Marker initialized: " << server_->size());
 }
 
 int JogFrameNodeAbs::get_controller_list()

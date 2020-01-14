@@ -25,9 +25,121 @@ JogFramePanelAbs::JogFramePanelAbs(QWidget* parent) : rviz::Panel(parent)
     {
         ROS_INFO_STREAM("link_names:" << link_names_[i]);
     }
-    
+
     QLayout* root_layout = initUi(parent);
     setLayout(root_layout);
+
+    jog_frame_abs_pub_ = nh.advertise<jog_msgs::JogFrame>( "jog_frame", 1);
+    master_on_publish_ = false;
+    avoid_collisions_ = true;
+
+    initInteractiveMarkers();
+}
+
+void JogFramePanelAbs::onInitialize() 
+{
+    connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
+    updateFrame(frame_cb_);
+    
+    // initialize repeating timer
+    QTimer* timer = new QTimer( this );
+    connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
+    timer->start(100);
+}
+
+/**
+ * Gets repeatedley called by QTimer
+ */
+void JogFramePanelAbs::update()
+{
+    if(master_on_publish_ && on_publish_marker_) {
+        jog_frame_abs_pub_.publish(marker_msg_);
+    }
+}
+
+void JogFramePanelAbs::load(const rviz::Config& config)
+{
+
+}
+
+void JogFramePanelAbs::save(rviz::Config config) const 
+{
+
+}
+
+geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
+{
+    std::shared_ptr<tf2_ros::Buffer> tf = vis_manager_->getTF2BufferPtr();
+    try{
+        geometry_msgs::Transform transform = tf->lookupTransform(frame_id_, target_link_, ros::Time(0)).transform;
+        geometry_msgs::Pose* pose = new geometry_msgs::Pose();
+        pose->position.x = -transform.translation.x;
+        pose->position.y = -transform.translation.y;
+        pose->position.z = transform.translation.z;
+        return pose;
+    }
+    catch (tf::TransformException ex){
+        ROS_ERROR("%s",ex.what());
+    }
+    return nullptr;
+}
+
+void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback)
+{
+    if(feedback != nullptr) 
+    {
+        // reset the marker to the endeffectors position when mouse_up and stop the end effector
+        // from moving by setting ref_msg_ to it's actual pose.
+        if(feedback->event_type == feedback->MOUSE_UP) 
+        {
+            on_publish_marker_ = false;
+            
+            geometry_msgs::Pose* pose = getTargetLinkPose();
+
+            if(pose != nullptr) {
+                server_->setPose(int_marker_->name, *pose);
+                server_->applyChanges();
+                // tell target link to stay where it is
+                marker_msg_.header.stamp = ros::Time::now();
+                marker_msg_.header.frame_id = frame_id_;
+                marker_msg_.group_name = group_name_;
+                marker_msg_.link_name = target_link_;
+                marker_msg_.avoid_collisions = avoid_collisions_;
+                marker_msg_.linear_abs.x =  -pose->position.x;
+                marker_msg_.linear_abs.y =  -pose->position.y;
+                marker_msg_.linear_abs.z =  pose->position.z;
+                marker_msg_.angular_abs.x = pose->orientation.x;
+                marker_msg_.angular_abs.y = pose->orientation.y;
+                marker_msg_.angular_abs.z = pose->orientation.z;
+                jog_frame_abs_pub_.publish(marker_msg_);
+            }
+        }
+        else 
+        {
+            on_publish_marker_ = true;
+            //ROS_WARN("req mutex 10");
+            //std::lock_guard<std::mutex> guard_marker_msg(marker_msg_mutex_);
+            //ROS_INFO("mutex 10");
+            marker_msg_.header.stamp = ros::Time::now();
+            marker_msg_.header.frame_id = frame_id_;
+            marker_msg_.group_name = group_name_;
+            marker_msg_.link_name = target_link_;
+            marker_msg_.avoid_collisions = avoid_collisions_;
+            // For some reason, x and y axis are mirrored
+            marker_msg_.linear_abs.x = -feedback->pose.position.x;
+            marker_msg_.linear_abs.y = -feedback->pose.position.y;
+            marker_msg_.linear_abs.z = feedback->pose.position.z;
+            marker_msg_.angular_abs.x = feedback->pose.orientation.x;
+            marker_msg_.angular_abs.y = feedback->pose.orientation.y;
+            marker_msg_.angular_abs.z = feedback->pose.orientation.z;
+        }
+    }
+}
+
+void JogFramePanelAbs::respondOnOffCb(bool isChecked)
+{
+    ROS_INFO_STREAM("Enabled: " << isChecked);
+    master_on_publish_ = isChecked;
 }
 
 QLayout* JogFramePanelAbs::initUi(QWidget* parent)
@@ -49,8 +161,8 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     }
     tree->insertTopLevelItems(0, items);
 
-    QCheckBox* onOffJog = new QCheckBox();
-    tree->setItemWidget(items.value(0), 1, onOffJog);
+    QCheckBox* on_off_master_ = new QCheckBox();
+    tree->setItemWidget(items.value(0), 1, on_off_master_);
 
     QComboBox* groupBox = new QComboBox();
     for (auto it = group_names_.begin(); it != group_names_.end(); it++) {
@@ -59,6 +171,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
             continue;
         groupBox->addItem(group.c_str());
     }
+    group_name_ = groupBox->currentText().toStdString(); 
     tree->setItemWidget(items.value(1), 1, groupBox);
 
     frame_cb_ = new QComboBox();
@@ -70,11 +183,14 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
         targetlink->addItem(link_names_[i].c_str());
     }
     targetlink->setCurrentIndex(0);
-    target_link_id_ = targetlink->currentText().toStdString();
+    target_link_ = targetlink->currentText().toStdString();
     tree->setItemWidget(items.value(3), 1, targetlink);
 
     QVBoxLayout* root_layout = new QVBoxLayout;
     root_layout->addWidget(tree);
+
+    connect(on_off_master_, SIGNAL(toggled(bool)), this, SLOT(respondOnOffCb(bool)));
+
     return root_layout;
 }
 
@@ -83,7 +199,7 @@ void JogFramePanelAbs::updateFrame(QComboBox* frameCb)
     typedef std::vector<std::string> V_string;
     V_string frames;
 
-    vis_manager_->getTFClient()->getFrameStrings( frames );
+    vis_manager_->getTF2BufferPtr()->_getFrameStrings( frames );
     std::sort(frames.begin(), frames.end());
     frameCb->clear();
     for (V_string::iterator it = frames.begin(); it != frames.end(); ++it )
@@ -97,26 +213,82 @@ void JogFramePanelAbs::updateFrame(QComboBox* frameCb)
     frame_id_ = frameCb->currentText().toStdString();
 }
 
-void JogFramePanelAbs::onInitialize() 
+void JogFramePanelAbs::initInteractiveMarkers() 
 {
-    connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
-    updateFrame(frame_cb_); 
-    //marker_pub_ = nh.advertise<visualization_msgs::Marker>("visualization_marker", 1);
-}
+  server_ = new interactive_markers::InteractiveMarkerServer("jog_frame_node_abs", "", true);
 
-void JogFramePanelAbs::load(const rviz::Config& config)
-{
+  // create an interactive marker for our server
+  int_marker_ = new visualization_msgs::InteractiveMarker();
+  int_marker_->header.frame_id = "base_link";
+  //int_marker.header.stamp=ros::Time::now();
+  int_marker_->name = "jog_frame_marker";
+  int_marker_->description = "3-DOF Jogging Control";
+  int_marker_->scale = 0.15;
 
-}
+  // create a marker
+  visualization_msgs::Marker marker;
+  marker.type = visualization_msgs::Marker::SPHERE;
+  marker.scale.x = 0.075;
+  marker.scale.y = 0.075;
+  marker.scale.z = 0.075;
+  marker.color.r = 1.0;
+  marker.color.g = 0.5;
+  marker.color.b = 0.0;
+  marker.color.a = 1.0;
 
-void JogFramePanelAbs::save(rviz::Config config) const 
-{
+  // create a non-interactive control which contains the box
+  visualization_msgs::InteractiveMarkerControl marker_control;
+  marker_control.always_visible = true;
+  marker_control.markers.push_back( marker );
+  marker_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_3D; 
 
-}
+  // add the control to the interactive marker
+  int_marker_->controls.push_back( marker_control );
 
-void JogFramePanelAbs::update()
-{
+  // create a control which will move the box
+  // this control does not contain any markers,
+  // which will cause RViz to insert two arrows
+  visualization_msgs::InteractiveMarkerControl arrow_control;
+  arrow_control.name = "move_x";
+  arrow_control.orientation.w = 1;
+  arrow_control.orientation.x = 1;
+  arrow_control.orientation.y = 0;
+  arrow_control.orientation.z = 0;
+  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
+  int_marker_->controls.push_back(arrow_control);
+  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
+  int_marker_->controls.push_back(arrow_control);
 
+  arrow_control.name = "move_y";
+  arrow_control.orientation.w = 1;
+  arrow_control.orientation.x = 0;
+  arrow_control.orientation.y = 1;
+  arrow_control.orientation.z = 0;
+  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
+  int_marker_->controls.push_back(arrow_control);
+  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
+  int_marker_->controls.push_back(arrow_control);
+
+  arrow_control.name = "move_z";
+  arrow_control.orientation.w = 1;
+  arrow_control.orientation.x = 0;
+  arrow_control.orientation.y = 0;
+  arrow_control.orientation.z = 1;
+  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::MOVE_AXIS;
+  int_marker_->controls.push_back(arrow_control);
+  arrow_control.interaction_mode = visualization_msgs::InteractiveMarkerControl::ROTATE_AXIS;
+  int_marker_->controls.push_back(arrow_control);
+
+  // add the control to the interactive marker
+  int_marker_->pose.position.z = 1;
+
+  // add the interactive marker to our collection &
+  // tell the server to call processMarkerFeedback() when feedback arrives for it
+  server_->insert(*int_marker_);
+  server_->setCallback(int_marker_->name, boost::bind(&JogFramePanelAbs::interactiveMarkerFeedback, this, _1));
+  server_->applyChanges();
+
+  ROS_WARN_STREAM("Interactive Marker initialized: " << server_->size());
 }
 
 } // namespace

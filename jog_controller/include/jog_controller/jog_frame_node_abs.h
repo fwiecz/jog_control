@@ -48,9 +48,6 @@ public:
   void getFkPose();
   void jogStep(double rate);
   void publishPose(sensor_msgs::JointState state);
-  void initInteractiveMarkers();
-  void resetInteractiveMarker();
-  void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
 protected:
   ros::Subscriber joint_state_sub_, jog_frame_sub_;
   ros::ServiceClient fk_client_, ik_client_;
@@ -67,14 +64,9 @@ protected:
   double time_from_start_;
   bool use_action_;
   bool intermittent_;
-  interactive_markers::InteractiveMarkerServer* server_;
 
   jog_msgs::JogFrameConstPtr ref_msg_;
   std::mutex ref_msg_mutex_;
-
-  jog_msgs::JogFrame marker_msg_;
-  visualization_msgs::InteractiveMarker* int_marker_;
-  std::mutex marker_msg_mutex_;
 
   std::string target_link_;
   std::string group_name_;

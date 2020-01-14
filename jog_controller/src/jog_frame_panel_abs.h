@@ -1,6 +1,7 @@
 #ifndef JOG_FRAME_PANEL_ABS_H
 #define JOG_FRAME_PANEL_ABS_H
 #include <interactive_markers/interactive_marker_server.h>
+#include <jog_msgs/JogFrame.h>
 
 #include <ros/ros.h>
 #include <rviz/panel.h>
@@ -22,18 +23,30 @@ class JogFramePanelAbs : public rviz::Panel
         virtual void onInitialize();
         virtual void load(const rviz::Config& config);
         virtual void save(rviz::Config config) const;
-        visualization_msgs::InteractiveMarker buildIntMarker();
-    protected Q_SLOTS:
+        void initInteractiveMarkers();
+        void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
         void update();
+        geometry_msgs::Pose* getTargetLinkPose();
+    protected Q_SLOTS:
+        void respondOnOffCb(bool isChecked);
     
     protected:
+        QComboBox* frame_cb_;
         std::vector<std::string> group_names_;
         std::vector<std::string> link_names_;
-        std::string frame_id_;
-        std::string target_link_id_;
-        QComboBox* frame_cb_;
         interactive_markers::InteractiveMarkerServer* m_server_;
-        ros::Publisher* marker_pub_;
+        ros::Publisher jog_frame_abs_pub_;
+
+        interactive_markers::InteractiveMarkerServer* server_;
+        visualization_msgs::InteractiveMarker* int_marker_;
+        jog_msgs::JogFrame marker_msg_;
+        bool on_publish_marker_;
+        bool master_on_publish_;
+
+        std::string target_link_;
+        std::string group_name_;
+        std::string frame_id_;
+        bool avoid_collisions_;
 };
 
 }
