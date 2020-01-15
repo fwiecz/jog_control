@@ -29,6 +29,7 @@ JogFrameNodeAbs::JogFrameNodeAbs()
 
   jog_frame_abs_pub_ = gnh.advertise<jog_msgs::JogFrame>( "jog_frame", 1);
   avoid_collisions_ = true;
+  velocity_fac_ = 0.5;
 
   if (not use_action_ && intermittent_)
   {
@@ -133,6 +134,9 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     group_name_ = msg->group_name;
     target_link_ = msg->link_name;
     avoid_collisions_ = msg->avoid_collisions;
+    if(msg->velocity_factor != 0) {
+      velocity_fac_ = std::min(1.0, std::max(0.1, msg->velocity_factor));
+    }
     //ROS_WARN("req mutex 1");
     std::lock_guard<std::mutex> guard_ref_msg(ref_msg_mutex_);
     //ROS_INFO("mutex 1");
@@ -173,6 +177,7 @@ void JogFrameNodeAbs::getFkPose()
   joint_state_.position.clear();
   joint_state_.velocity.clear();
   joint_state_.effort.clear();
+  
   
   for (auto it=joint_map_.begin(); it!=joint_map_.end(); it++)
   {
@@ -261,18 +266,9 @@ void JogFrameNodeAbs::jogStep(double rate)
     return;
   }
 
-  // check whether downscaling is necessary
-  // TODO parametrize
-  double threshold = 0.2;
-  double decFactor = 0.75;
-  if(dist > threshold) {
-    dirX = (dirX / dist) * threshold; 
-    dirY = (dirY / dist) * threshold; 
-    dirZ = (dirZ / dist) * threshold;
-  }
-  double nDirX = (dirX * decFactor); 
-  double nDirY = (dirY * decFactor); 
-  double nDirZ = (dirZ * decFactor);
+  double nDirX = (dirX * velocity_fac_); 
+  double nDirY = (dirY * velocity_fac_); 
+  double nDirZ = (dirZ * velocity_fac_);
   ref_pose.pose.position.x = pose_stamped_.pose.position.x + nDirX;
   ref_pose.pose.position.y = pose_stamped_.pose.position.y + nDirY;
   ref_pose.pose.position.z = pose_stamped_.pose.position.z + nDirZ;

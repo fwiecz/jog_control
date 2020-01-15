@@ -30,7 +30,10 @@ class JogFramePanelAbs : public rviz::Panel
         void resetInteractiveMarker();
     protected Q_SLOTS:
         void respondOnOffCb(bool isChecked);
-    
+        void respondVelocity(double value);
+        void respondTargetLink(QString text);
+        void respondGroupName(QString text);
+        void respondFrameId(QString text);
     protected:
         QComboBox* frame_cb_;
         std::vector<std::string> group_names_;
@@ -48,6 +51,7 @@ class JogFramePanelAbs : public rviz::Panel
         std::string group_name_;
         std::string frame_id_;
         bool avoid_collisions_;
+        double velocity_fac_;
 };
 
 }

@@ -125,6 +125,7 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
                 marker_msg_.angular_abs.x = pose->orientation.x;
                 marker_msg_.angular_abs.y = pose->orientation.y;
                 marker_msg_.angular_abs.z = pose->orientation.z;
+                marker_msg_.velocity_factor = velocity_fac_;
                 
                 if(master_on_publish_) {
                     jog_frame_abs_pub_.publish(marker_msg_);
@@ -149,27 +150,52 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
             marker_msg_.angular_abs.x = feedback->pose.orientation.x;
             marker_msg_.angular_abs.y = feedback->pose.orientation.y;
             marker_msg_.angular_abs.z = feedback->pose.orientation.z;
+            marker_msg_.velocity_factor = velocity_fac_;
         }
     }
 }
 
 void JogFramePanelAbs::respondOnOffCb(bool isChecked)
 {
-    ROS_INFO_STREAM("Enabled: " << isChecked);
     master_on_publish_ = isChecked;
+}
+
+void JogFramePanelAbs::respondTargetLink(QString text)
+{
+    target_link_ = text.toStdString();
+    resetInteractiveMarker();
+}
+
+void JogFramePanelAbs::respondGroupName(QString text)
+{
+    group_name_ = text.toStdString();
+    resetInteractiveMarker();
+}
+
+void JogFramePanelAbs::respondFrameId(QString text)
+{
+    frame_id_ = text.toStdString();
+    resetInteractiveMarker();
+}
+
+
+void JogFramePanelAbs::respondVelocity(double value)
+{
+    velocity_fac_ = value;
 }
 
 QLayout* JogFramePanelAbs::initUi(QWidget* parent)
 {
     QTreeWidget* tree = new QTreeWidget();
     tree->setColumnCount(2);
+    tree->setColumnWidth(0, 200);
     QStringList headers = {"Preferences", ""};
     tree->setHeaderLabels(headers);
-    //tree->headerItem()->setSizeHint(0 /*column index*/, QSize(50, 0) /*width*/);
-    //tree->headerItem()->setSizeHint(1 /*column index*/, QSize(50, 0) /*width*/);
-    //tree->headerItem()->setHidden(true);
+    tree->setStyleSheet("QTreeView::item { border: 0px; margin: 2px; }");
+    tree->setSelectionMode(QAbstractItemView::NoSelection);
+    tree->setFocusPolicy(Qt::NoFocus);
 
-    QStringList prefs = {"Enable Jogging", "Group", "Frame", "Target link", "Max Speed"};
+    QStringList prefs = {"Enable Jogging", "Group", "Frame", "Target link", "Velocity Factor"};
 
     QList<QTreeWidgetItem *> items;
     for (int i = 0; i < prefs.size(); ++i) {
@@ -182,6 +208,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     tree->setItemWidget(items.value(0), 1, on_off_master_);
 
     QComboBox* groupBox = new QComboBox();
+    groupBox->setEditable(true);
     for (auto it = group_names_.begin(); it != group_names_.end(); it++) {
         const std::string& group = *it;
         if (group.empty())
@@ -192,9 +219,11 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     tree->setItemWidget(items.value(1), 1, groupBox);
 
     frame_cb_ = new QComboBox();
+    frame_cb_->setEditable(true);
     tree->setItemWidget(items.value(2), 1, frame_cb_);
 
     QComboBox* targetlink = new QComboBox();
+    targetlink->setEditable(true);
     targetlink->clear();
     for (int i=0; i<link_names_.size(); i++) {
         targetlink->addItem(link_names_[i].c_str());
@@ -203,10 +232,21 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     target_link_ = targetlink->currentText().toStdString();
     tree->setItemWidget(items.value(3), 1, targetlink);
 
+    QDoubleSpinBox* speedSb = new QDoubleSpinBox();
+    speedSb->setRange(0.1, 1.0);
+    speedSb->setSingleStep(0.1);
+    speedSb->setValue(0.6);
+    velocity_fac_ = speedSb->value();
+    tree->setItemWidget(items.value(4), 1, speedSb);
+
     QVBoxLayout* root_layout = new QVBoxLayout;
     root_layout->addWidget(tree);
 
     connect(on_off_master_, SIGNAL(toggled(bool)), this, SLOT(respondOnOffCb(bool)));
+    connect(speedSb, SIGNAL(valueChanged(double)), this, SLOT(respondVelocity(double)));
+    connect(targetlink, SIGNAL(currentTextChanged(QString)), this, SLOT(respondTargetLink(QString)));
+    connect(groupBox, SIGNAL(currentTextChanged(QString)), this, SLOT(respondGroupName(QString)));
+    connect(frame_cb_, SIGNAL(currentTextChanged(QString)), this, SLOT(respondFrameId(QString)));
 
     return root_layout;
 }

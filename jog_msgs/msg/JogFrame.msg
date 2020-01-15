@@ -30,3 +30,9 @@ geometry_msgs/Vector3 linear_abs
 
 # Target orientation for the link to jog. Unit is probably in radians.
 geometry_msgs/Vector3 angular_abs
+
+# The velocity used for absolute jogging. It ranges from 0.1 to 1.0.
+# The velocity is not linear. It is rather cacluated by 'dist * msg.velocity'
+# resulting in faster movements when the target is far away and precise movements
+# when the target is very close.
+float64 velocity_factor
