@@ -41,12 +41,12 @@ void JogFramePanelAbs::onInitialize()
     connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
     updateFrame(frame_cb_);
 
-    resetInteractiveMarker();
-    
     // initialize repeating timer
     QTimer* timer = new QTimer( this );
     connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
     timer->start(100);
+
+    resetInteractiveMarker();
 }
 
 /**
@@ -78,6 +78,10 @@ geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
         pose->position.x = transform.translation.x;
         pose->position.y = transform.translation.y;
         pose->position.z = transform.translation.z;
+        pose->orientation.x = transform.rotation.x;
+        pose->orientation.y = transform.rotation.y;
+        pose->orientation.z = transform.rotation.z;
+        pose->orientation.w = transform.rotation.w;
         return pose;
     }
     catch (tf::TransformException ex){
@@ -88,11 +92,14 @@ geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
 
 void JogFramePanelAbs::resetInteractiveMarker()
 {
-    geometry_msgs::Pose markerPose = geometry_msgs::Pose(*getTargetLinkPose());
-    markerPose.position.x = -markerPose.position.x;
-    markerPose.position.y = -markerPose.position.y;
-    server_->setPose(int_marker_->name, markerPose);
-    server_->applyChanges();
+    geometry_msgs::Pose* pose_ptr = getTargetLinkPose();
+    if(pose_ptr != nullptr) {
+        geometry_msgs::Pose markerPose = geometry_msgs::Pose(*pose_ptr);
+        markerPose.position.x = markerPose.position.x;
+        markerPose.position.y = markerPose.position.y;
+        server_->setPose(int_marker_->name, markerPose);
+        server_->applyChanges();
+    }
 }
 
 void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback)
@@ -108,23 +115,19 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
             geometry_msgs::Pose* pose = getTargetLinkPose();
 
             if(pose != nullptr) {
-                geometry_msgs::Pose markerPose = geometry_msgs::Pose(*pose);
-                markerPose.position.x = -markerPose.position.x;
-                markerPose.position.y = -markerPose.position.y;
-                server_->setPose(int_marker_->name, markerPose);
-                server_->applyChanges();
                 // tell target link to stay where it is
                 marker_msg_.header.stamp = ros::Time::now();
                 marker_msg_.header.frame_id = frame_id_;
                 marker_msg_.group_name = group_name_;
                 marker_msg_.link_name = target_link_;
                 marker_msg_.avoid_collisions = avoid_collisions_;
-                marker_msg_.linear_abs.x =  pose->position.x;
-                marker_msg_.linear_abs.y =  pose->position.y;
-                marker_msg_.linear_abs.z =  pose->position.z;
-                marker_msg_.angular_abs.x = pose->orientation.x;
-                marker_msg_.angular_abs.y = pose->orientation.y;
-                marker_msg_.angular_abs.z = pose->orientation.z;
+                marker_msg_.pose.position.x =  pose->position.x;
+                marker_msg_.pose.position.y =  pose->position.y;
+                marker_msg_.pose.position.z =  pose->position.z;
+                marker_msg_.pose.orientation.x = pose->orientation.x;
+                marker_msg_.pose.orientation.y = pose->orientation.y;
+                marker_msg_.pose.orientation.z = pose->orientation.z;
+                marker_msg_.pose.orientation.w = pose->orientation.w;
                 marker_msg_.velocity_factor = velocity_fac_;
                 
                 if(master_on_publish_) {
@@ -135,21 +138,19 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
         else 
         {
             on_publish_marker_ = true;
-            //ROS_WARN("req mutex 10");
-            //std::lock_guard<std::mutex> guard_marker_msg(marker_msg_mutex_);
-            //ROS_INFO("mutex 10");
             marker_msg_.header.stamp = ros::Time::now();
             marker_msg_.header.frame_id = frame_id_;
             marker_msg_.group_name = group_name_;
             marker_msg_.link_name = target_link_;
             marker_msg_.avoid_collisions = avoid_collisions_;
             // For some reason when dealing with markers x and y axis are mirrored
-            marker_msg_.linear_abs.x = -feedback->pose.position.x;
-            marker_msg_.linear_abs.y = -feedback->pose.position.y;
-            marker_msg_.linear_abs.z = feedback->pose.position.z;
-            marker_msg_.angular_abs.x = feedback->pose.orientation.x;
-            marker_msg_.angular_abs.y = feedback->pose.orientation.y;
-            marker_msg_.angular_abs.z = feedback->pose.orientation.z;
+            marker_msg_.pose.position.x = feedback->pose.position.x;
+            marker_msg_.pose.position.y = feedback->pose.position.y;
+            marker_msg_.pose.position.z = feedback->pose.position.z;
+            marker_msg_.pose.orientation.x = feedback->pose.orientation.x;
+            marker_msg_.pose.orientation.y = feedback->pose.orientation.y;
+            marker_msg_.pose.orientation.z = feedback->pose.orientation.z;
+            marker_msg_.pose.orientation.w = feedback->pose.orientation.w;
             marker_msg_.velocity_factor = velocity_fac_;
         }
     }
@@ -279,7 +280,7 @@ void JogFramePanelAbs::initInteractiveMarkers()
   int_marker_->header.frame_id = "base_link";
   //int_marker.header.stamp=ros::Time::now();
   int_marker_->name = "jog_frame_marker";
-  int_marker_->description = "3-DOF Jogging Control";
+  int_marker_->description = "6-DOF Jogging Control";
   int_marker_->scale = 0.15;
 
   // create a marker

@@ -25,11 +25,8 @@ geometry_msgs/Vector3 angular_delta
 # true, the robot doesn't move if any collisions occured.
 bool avoid_collisions
 
-# Target position for the link to jog. Unit is probably in meter.
-geometry_msgs/Vector3 linear_abs
-
-# Target orientation for the link to jog. Unit is probably in radians.
-geometry_msgs/Vector3 angular_abs
+# Target pose that should be followed by the target link
+geometry_msgs/Pose pose
 
 # The velocity used for absolute jogging. It ranges from 0.1 to 1.0.
 # The velocity is not linear. It is rather cacluated by 'dist * msg.velocity'

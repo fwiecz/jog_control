@@ -141,7 +141,6 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     std::lock_guard<std::mutex> guard_ref_msg(ref_msg_mutex_);
     //ROS_INFO("mutex 1");
     ref_msg_ = msg;
-    ROS_INFO("Got frame_msg");
   }  
   // Update timestamp of the last jog command
   last_stamp_ = msg->header.stamp;
@@ -253,18 +252,10 @@ void JogFrameNodeAbs::jogStep(double rate)
   ref_pose.header.frame_id = ref_msg_->header.frame_id;
   ref_pose.header.stamp = ros::Time::now();
 
-  // when the target pose is too far away, a pose with a max difference will be calculated directing
-  // the pose towards the target pose (basically linear interpolation).
-
-  double dirX = ref_msg_->linear_abs.x - act_pose.position.x;
-  double dirY = ref_msg_->linear_abs.y - act_pose.position.y;
-  double dirZ = ref_msg_->linear_abs.z - act_pose.position.z;
-  double dist = sqrt(((double)dirX*dirX) + ((double)dirY*dirY) + ((double)dirZ*dirZ));
-
-  // do not jog any further, this is close enough
-  if(dist < 0.005) {
-    return;
-  }
+  double dirX = ref_msg_->pose.position.x - act_pose.position.x;
+  double dirY = ref_msg_->pose.position.y - act_pose.position.y;
+  double dirZ = ref_msg_->pose.position.z - act_pose.position.z;
+  double position_dist = sqrt(((double)dirX*dirX) + ((double)dirY*dirY) + ((double)dirZ*dirZ));
 
   double nDirX = (dirX * velocity_fac_); 
   double nDirY = (dirY * velocity_fac_); 
@@ -273,29 +264,29 @@ void JogFrameNodeAbs::jogStep(double rate)
   ref_pose.pose.position.y = pose_stamped_.pose.position.y + nDirY;
   ref_pose.pose.position.z = pose_stamped_.pose.position.z + nDirZ;
 
-
   // Apply orientation jog
-  tf::Quaternion q_ref, q_act, q_jog;
+  tf::Quaternion q_ref, q_act, q_jog, q_target;
   tf::quaternionMsgToTF(act_pose.orientation, q_act);
-  double angle = sqrt(ref_msg_->angular_delta.x*ref_msg_->angular_delta.x +
-                      ref_msg_->angular_delta.y*ref_msg_->angular_delta.y +
-                      ref_msg_->angular_delta.z*ref_msg_->angular_delta.z);
-  tf::Vector3 axis(0,0,1);
-  if (fabs(angle) < DBL_EPSILON)
-  {
-    angle = 0.0;
+  tf::quaternionMsgToTF(ref_msg_->pose.orientation, q_target);
+  
+  double orientation_dist = tf::angleShortestPath(q_act, q_target);
+  q_ref = tf::slerp(q_act, q_target, velocity_fac_);
+
+  try {
+    tf::assertQuaternionValid(q_act);
+    tf::assertQuaternionValid(q_target);
+    tf::assertQuaternionValid(q_ref);
+  } catch(const std::exception& e) {
+    ROS_ERROR("Quaternion is invalid!");
+    return;
   }
-  else
-  {
-    axis.setX(ref_msg_->angular_delta.x/angle);
-    axis.setY(ref_msg_->angular_delta.y/angle);
-    axis.setZ(ref_msg_->angular_delta.z/angle);
+  
+  // position and orientation are close enough
+  if(position_dist < 0.005 && orientation_dist < 0.001) {
+    return;
   }
 
-  q_jog.setRotation(axis, angle);
-  q_ref = q_jog*q_act;
   quaternionTFToMsg(q_ref, ref_pose.pose.orientation);
-
   ik.request.ik_request.pose_stamped = ref_pose;
 
   if (!ik_client_.call(ik))
@@ -323,6 +314,7 @@ void JogFrameNodeAbs::jogStep(double rate)
         double e = fabs(state.position[i] - joint_state_.position[j]);
         if (e > error)
         {
+          // find largest error
           error = e;
         }
         break;
