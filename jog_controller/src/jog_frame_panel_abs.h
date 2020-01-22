@@ -18,12 +18,14 @@ class JogFramePanelAbs : public rviz::Panel
     Q_OBJECT
     public:
         JogFramePanelAbs(QWidget* parent = 0);
+        ~JogFramePanelAbs();
         QLayout* initUi(QWidget* parent);
         void updateFrame(QComboBox* frameCb);
         virtual void onInitialize();
         virtual void load(const rviz::Config& config);
         virtual void save(rviz::Config config) const;
-        void closeEvent(QCloseEvent* event);
+        void hideEvent(QHideEvent* event);
+        void showEvent(QShowEvent* event);
         void initInteractiveMarkers();
         void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
         geometry_msgs::Pose* getTargetLinkPose();
@@ -40,7 +42,6 @@ class JogFramePanelAbs : public rviz::Panel
         QComboBox* frame_cb_;
         std::vector<std::string> group_names_;
         std::vector<std::string> link_names_;
-        interactive_markers::InteractiveMarkerServer* m_server_;
         ros::Publisher jog_frame_abs_pub_;
 
         interactive_markers::InteractiveMarkerServer* server_;

@@ -33,8 +33,23 @@ JogFramePanelAbs::JogFramePanelAbs(QWidget* parent) : rviz::Panel(parent)
     jog_frame_abs_pub_ = nh.advertise<jog_msgs::JogFrame>( "jog_frame", 1);
     master_on_publish_ = false;
     avoid_collisions_ = true;
+}
 
+JogFramePanelAbs::~JogFramePanelAbs()
+{
+    server_->clear();
+    server_->applyChanges();
+    delete int_marker_;
+    delete server_;
+}
+
+void JogFramePanelAbs::onInitialize() 
+{
+    ROS_WARN("ON Initial");
     initInteractiveMarkers();
+    connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
+    updateFrame(frame_cb_);
+    resetInteractiveMarker();
 
     // initialize repeating timer
     QTimer* timer = new QTimer( this );
@@ -45,13 +60,6 @@ JogFramePanelAbs::JogFramePanelAbs(QWidget* parent) : rviz::Panel(parent)
     double msg_rate = 20;
     int milliseconds = (1.0 / msg_rate) * 1000;
     timer->start(milliseconds);
-}
-
-void JogFramePanelAbs::onInitialize() 
-{
-    connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
-    updateFrame(frame_cb_);
-    resetInteractiveMarker();
 }
 
 /**
@@ -74,23 +82,30 @@ void JogFramePanelAbs::save(rviz::Config config) const
 
 }
 
-void JogFramePanelAbs::closeEvent(QCloseEvent* event)
+void JogFramePanelAbs::hideEvent(QHideEvent* event)
 {
-    ROS_WARN("DEstroy");
+    server_->clear();
+    server_->applyChanges();
+}
+
+void JogFramePanelAbs::showEvent(QShowEvent* event)
+{
+    server_->insert(*int_marker_);
+    server_->applyChanges();
+    resetInteractiveMarker();
 }
 
 geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
 {
     tf::TransformListener* tf = vis_manager_->getTFClient();
-   // std::shared_ptr<tf2_ros::Buffer> tf = vis_manager_->getTF2BufferPtr();
     try{
-        //geometry_msgs::Transform transform = tf->lookupTransform(frame_id_, target_link_, ros::Time(0)).transform;
         tf::StampedTransform transform;
-        tf->lookupTransform(frame_id_, target_link_, ros::Time(0), transform);
+        tf->lookupTransform(frame_id_, target_link_, ros::Time(), transform);
+        tf::Vector3 v = transform.getOrigin();
         geometry_msgs::Pose* pose = new geometry_msgs::Pose();
-        pose->position.x = transform.getOrigin().x();
-        pose->position.y = transform.getOrigin().y();
-        pose->position.z = transform.getOrigin().z();
+        pose->position.x = v.getX();
+        pose->position.y = v.getY();
+        pose->position.z = v.getZ();
         quaternionTFToMsg(transform.getRotation() ,pose->orientation);
         return pose;
     }
@@ -105,8 +120,6 @@ void JogFramePanelAbs::resetInteractiveMarker()
     geometry_msgs::Pose* pose_ptr = getTargetLinkPose();
     if(pose_ptr != nullptr) {
         geometry_msgs::Pose markerPose = geometry_msgs::Pose(*pose_ptr);
-        markerPose.position.x = markerPose.position.x;
-        markerPose.position.y = markerPose.position.y;
         server_->setPose(int_marker_->name, markerPose);
         server_->applyChanges();
     }
@@ -153,7 +166,6 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
             marker_msg_.group_name = group_name_;
             marker_msg_.link_name = target_link_;
             marker_msg_.avoid_collisions = avoid_collisions_;
-            // For some reason when dealing with markers x and y axis are mirrored
             marker_msg_.pose.position.x = feedback->pose.position.x;
             marker_msg_.pose.position.y = feedback->pose.position.y;
             marker_msg_.pose.position.z = feedback->pose.position.z;
@@ -249,8 +261,8 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
 
     QDoubleSpinBox* speedSb = new QDoubleSpinBox();
     speedSb->setRange(0.1, 1.0);
-    speedSb->setSingleStep(0.1);
-    speedSb->setValue(0.6);
+    speedSb->setSingleStep(0.05);
+    speedSb->setValue(0.95);
     velocity_fac_ = speedSb->value();
     tree->setItemWidget(items.value(4), 1, speedSb);
 
