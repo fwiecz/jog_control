@@ -35,22 +35,22 @@ JogFramePanelAbs::JogFramePanelAbs(QWidget* parent) : rviz::Panel(parent)
     avoid_collisions_ = true;
 
     initInteractiveMarkers();
-}
 
+    // initialize repeating timer
+    QTimer* timer = new QTimer( this );
+    //connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
+    connect(timer, SIGNAL(timeout()), this, SLOT(update()));
+
+    // send 20 jog commands per second
+    double msg_rate = 20;
+    int milliseconds = (1.0 / msg_rate) * 1000;
+    timer->start(milliseconds);
+}
 
 void JogFramePanelAbs::onInitialize() 
 {
     connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
     updateFrame(frame_cb_);
-
-    // initialize repeating timer
-    QTimer* timer = new QTimer( this );
-    //connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
-    connect(timer, SIGNAL(timeout()), this, SLOT(&JogFramePanelAbs::update()));
-    // send 20 jog commands per second
-    double msg_rate = 20;
-    timer->start(1.0 / msg_rate);
-
     resetInteractiveMarker();
 }
 
@@ -92,9 +92,6 @@ geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
         pose->position.y = transform.getOrigin().y();
         pose->position.z = transform.getOrigin().z();
         quaternionTFToMsg(transform.getRotation() ,pose->orientation);
-        //pose->orientation.y = transform.rotation.y;
-        //pose->orientation.z = transform.rotation.z;
-        //pose->orientation.w = transform.rotation.w;
         return pose;
     }
     catch (tf::TransformException ex){

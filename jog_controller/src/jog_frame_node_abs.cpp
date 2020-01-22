@@ -401,10 +401,11 @@ void JogFrameNodeAbs::joint_state_cb(sensor_msgs::JointStateConstPtr msg)
     return;
   }
   // Update joint information
-  ROS_INFO("joint states");
+  
+  //ROS_INFO("joint states");
   for (int i=0; i<msg->name.size(); i++)
   {
-    std::cout << msg->name[i] << ": " << msg->position[i] << "\n";
+    // std::cout << msg->name[i] << ": " << msg->position[i] << "\n";
     joint_map_[msg->name[i]] = msg->position[i];
   }
 }
