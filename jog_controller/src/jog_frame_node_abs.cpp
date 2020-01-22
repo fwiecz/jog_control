@@ -306,7 +306,7 @@ void JogFrameNodeAbs::jogStep(double rate)
   geometry_msgs::PoseStamped pose_check;
   
   // Make sure the solution is valid in joint space
-  double error = 0;
+  bool has_errors = false;
   for (int i=0; i<state.name.size(); i++)
   {
     for (int j=0; j<joint_state_.name.size(); j++)
@@ -314,20 +314,18 @@ void JogFrameNodeAbs::jogStep(double rate)
       if (state.name[i] == joint_state_.name[j])
       {
         double e = fabs(state.position[i] - joint_state_.position[j]);
-        if (e > error)
-        {
-          // find largest error
-          error = e;
+        if(e > M_PI / 2) {
+          has_errors = true;
+          ROS_ERROR_STREAM(joint_state_.name[j] << " is at " << joint_state_.position[j] << " but target is " << state.position[i] << "!");
         }
         break;
       }
     }
   }
-  if (error > M_PI / 2)
-  {
-    ROS_ERROR_STREAM("**** Validation check Failed: " << error);
+  if(has_errors) {
+    ROS_ERROR_STREAM("**** Abort due to errors!");
     return;
-  } 
+  }
 
   publishPose(state);
 }
