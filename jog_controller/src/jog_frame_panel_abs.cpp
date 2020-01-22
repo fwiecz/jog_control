@@ -36,6 +36,7 @@ JogFramePanelAbs::JogFramePanelAbs(QWidget* parent) : rviz::Panel(parent)
     initInteractiveMarkers();
 }
 
+
 void JogFramePanelAbs::onInitialize() 
 {
     connect( vis_manager_, SIGNAL( preUpdate() ), this, SLOT( update() ));
@@ -44,7 +45,9 @@ void JogFramePanelAbs::onInitialize()
     // initialize repeating timer
     QTimer* timer = new QTimer( this );
     connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
-    timer->start(100);
+    // send 20 jog commands per second
+    double msg_rate = 20;
+    timer->start(1.0 / msg_rate);
 
     resetInteractiveMarker();
 }
@@ -67,6 +70,11 @@ void JogFramePanelAbs::load(const rviz::Config& config)
 void JogFramePanelAbs::save(rviz::Config config) const 
 {
 
+}
+
+void JogFramePanelAbs::closeEvent(QCloseEvent* event)
+{
+    ROS_WARN("DEstroy");
 }
 
 geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
@@ -179,10 +187,14 @@ void JogFramePanelAbs::respondFrameId(QString text)
     resetInteractiveMarker();
 }
 
-
 void JogFramePanelAbs::respondVelocity(double value)
 {
     velocity_fac_ = value;
+}
+
+void JogFramePanelAbs::respondCollision(bool isChecked)
+{
+    avoid_collisions_ = isChecked;
 }
 
 QLayout* JogFramePanelAbs::initUi(QWidget* parent)
@@ -196,7 +208,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     tree->setSelectionMode(QAbstractItemView::NoSelection);
     tree->setFocusPolicy(Qt::NoFocus);
 
-    QStringList prefs = {"Enable Jogging", "Group", "Frame", "Target link", "Velocity Factor"};
+    QStringList prefs = {"Enable Jogging", "Group", "Frame", "Target link", "Velocity Factor", "Collision Check"};
 
     QList<QTreeWidgetItem *> items;
     for (int i = 0; i < prefs.size(); ++i) {
@@ -240,10 +252,15 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     velocity_fac_ = speedSb->value();
     tree->setItemWidget(items.value(4), 1, speedSb);
 
+    QCheckBox* toggleCollisionCb = new QCheckBox();
+    toggleCollisionCb->setCheckState(Qt::Checked);
+    tree->setItemWidget(items.value(5), 1, toggleCollisionCb);
+
     QVBoxLayout* root_layout = new QVBoxLayout;
     root_layout->addWidget(tree);
 
     connect(on_off_master_, SIGNAL(toggled(bool)), this, SLOT(respondOnOffCb(bool)));
+    connect(toggleCollisionCb, SIGNAL(toggled(bool)), this, SLOT(respondCollision(bool)));
     connect(speedSb, SIGNAL(valueChanged(double)), this, SLOT(respondVelocity(double)));
     connect(targetlink, SIGNAL(currentTextChanged(QString)), this, SLOT(respondTargetLink(QString)));
     connect(groupBox, SIGNAL(currentTextChanged(QString)), this, SLOT(respondGroupName(QString)));

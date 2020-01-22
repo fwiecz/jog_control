@@ -23,6 +23,7 @@ class JogFramePanelAbs : public rviz::Panel
         virtual void onInitialize();
         virtual void load(const rviz::Config& config);
         virtual void save(rviz::Config config) const;
+        void closeEvent(QCloseEvent* event);
         void initInteractiveMarkers();
         void interactiveMarkerFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
         void update();
@@ -34,6 +35,7 @@ class JogFramePanelAbs : public rviz::Panel
         void respondTargetLink(QString text);
         void respondGroupName(QString text);
         void respondFrameId(QString text);
+        void respondCollision(bool isChecked);
     protected:
         QComboBox* frame_cb_;
         std::vector<std::string> group_names_;

@@ -127,7 +127,7 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     }    
   }
   // Update reference frame only if the stamp is older than last_stamp_ + time_from_start_
-  if (msg->header.stamp > last_stamp_ ) //+ ros::Duration(time_from_start_))
+  if (msg->header.stamp > last_stamp_ )
   {
     // update our reference message for the secondary thread
     frame_id_ = msg->header.frame_id;
@@ -141,9 +141,10 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
     std::lock_guard<std::mutex> guard_ref_msg(ref_msg_mutex_);
     //ROS_INFO("mutex 1");
     ref_msg_ = msg;
+
+    // Update timestamp of the last jog command
+    last_stamp_ = msg->header.stamp;
   }  
-  // Update timestamp of the last jog command
-  last_stamp_ = msg->header.stamp;
 }
 
 
@@ -152,7 +153,8 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
  */
 void JogFrameNodeAbs::follow_absolute_pose_thread() {
   
-  // TODO parametrize
+  // TODO parametrize.. or not the rate does not really affect smoothness or the
+  // ability to halt
   double rate = 10;
   ros::Rate jogging_rate(rate);
 
