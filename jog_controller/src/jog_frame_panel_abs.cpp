@@ -7,6 +7,7 @@
 #include <rviz/config.h>
 #include <rviz/visualization_manager.h>
 #include <tf/transform_listener.h>
+#include <tf/transform_datatypes.h>
 
 namespace jog_controller 
 {
@@ -44,7 +45,8 @@ void JogFramePanelAbs::onInitialize()
 
     // initialize repeating timer
     QTimer* timer = new QTimer( this );
-    connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
+    //connect( timer, &QTimer::timeout, this, QOverload<>::of(&JogFramePanelAbs::update));
+    connect(timer, SIGNAL(timeout()), this, SLOT(&JogFramePanelAbs::update()));
     // send 20 jog commands per second
     double msg_rate = 20;
     timer->start(1.0 / msg_rate);
@@ -79,17 +81,20 @@ void JogFramePanelAbs::closeEvent(QCloseEvent* event)
 
 geometry_msgs::Pose* JogFramePanelAbs::getTargetLinkPose()
 {
-    std::shared_ptr<tf2_ros::Buffer> tf = vis_manager_->getTF2BufferPtr();
+    tf::TransformListener* tf = vis_manager_->getTFClient();
+   // std::shared_ptr<tf2_ros::Buffer> tf = vis_manager_->getTF2BufferPtr();
     try{
-        geometry_msgs::Transform transform = tf->lookupTransform(frame_id_, target_link_, ros::Time(0)).transform;
+        //geometry_msgs::Transform transform = tf->lookupTransform(frame_id_, target_link_, ros::Time(0)).transform;
+        tf::StampedTransform transform;
+        tf->lookupTransform(frame_id_, target_link_, ros::Time(0), transform);
         geometry_msgs::Pose* pose = new geometry_msgs::Pose();
-        pose->position.x = transform.translation.x;
-        pose->position.y = transform.translation.y;
-        pose->position.z = transform.translation.z;
-        pose->orientation.x = transform.rotation.x;
-        pose->orientation.y = transform.rotation.y;
-        pose->orientation.z = transform.rotation.z;
-        pose->orientation.w = transform.rotation.w;
+        pose->position.x = transform.getOrigin().x();
+        pose->position.y = transform.getOrigin().y();
+        pose->position.z = transform.getOrigin().z();
+        quaternionTFToMsg(transform.getRotation() ,pose->orientation);
+        //pose->orientation.y = transform.rotation.y;
+        //pose->orientation.z = transform.rotation.z;
+        //pose->orientation.w = transform.rotation.w;
         return pose;
     }
     catch (tf::TransformException ex){
@@ -274,7 +279,8 @@ void JogFramePanelAbs::updateFrame(QComboBox* frameCb)
     typedef std::vector<std::string> V_string;
     V_string frames;
 
-    vis_manager_->getTF2BufferPtr()->_getFrameStrings( frames );
+    //vis_manager_->getTF2BufferPtr()->_getFrameStrings( frames );
+    vis_manager_->getTFClient()->getFrameStrings( frames );
     std::sort(frames.begin(), frames.end());
     frameCb->clear();
     for (V_string::iterator it = frames.begin(); it != frames.end(); ++it )
