@@ -91,6 +91,7 @@ void JogFramePanelAbs::hideEvent(QHideEvent* event)
 void JogFramePanelAbs::showEvent(QShowEvent* event)
 {
     server_->insert(*int_marker_);
+    server_->setCallback(int_marker_->name, boost::bind(&JogFramePanelAbs::interactiveMarkerFeedback, this, _1));
     server_->applyChanges();
     resetInteractiveMarker();
 }
