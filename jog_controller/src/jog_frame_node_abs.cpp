@@ -27,7 +27,6 @@ JogFrameNodeAbs::JogFrameNodeAbs()
   gnh.getParam("/jog_frame_node/link_names", link_names);
   target_link_ = link_names.size() > 0 ? link_names[0] : "";
 
-  jog_frame_abs_pub_ = gnh.advertise<jog_msgs::JogFrame>( "jog_frame", 1);
   avoid_collisions_ = true;
   velocity_fac_ = 0.5;
 
@@ -58,7 +57,7 @@ JogFrameNodeAbs::JogFrameNodeAbs()
 
   // Create subscribers
   joint_state_sub_ = gnh.subscribe("joint_states", 10, &JogFrameNodeAbs::joint_state_cb, this);
-  jog_frame_sub_ = gnh.subscribe("jog_frame", 10, &JogFrameNodeAbs::jog_frame_cb, this);
+  jog_frame_sub_ = gnh.subscribe("jog_frame_abs", 10, &JogFrameNodeAbs::jog_frame_cb, this);
   fk_client_ = gnh.serviceClient<moveit_msgs::GetPositionFK>("compute_fk");  
   ik_client_ = gnh.serviceClient<moveit_msgs::GetPositionIK>("compute_ik");  
   ros::topic::waitForMessage<sensor_msgs::JointState>("joint_states");
@@ -102,14 +101,15 @@ JogFrameNodeAbs::JogFrameNodeAbs()
   }
 
   // Create seperate thread for continous jogging towards the target position.
-  boost::thread worker_thread(&JogFrameNodeAbs::follow_absolute_pose_thread, this); 
+  // not necessary anymore. Main loop can be used for jogging as well
+  //boost::thread worker_thread(&JogFrameNodeAbs::follow_absolute_pose_thread, this); 
 }
 
 /**
  * @brief Callback function for the topic jog_frame
  * 
 */
-void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
+void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameAbsConstPtr msg)
 {
   joint_state_.header.stamp = ros::Time::now();
 
@@ -151,21 +151,21 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameConstPtr msg)
 /**
  * Worker thread for calulation
  */
-void JogFrameNodeAbs::follow_absolute_pose_thread() {
+void JogFrameNodeAbs::update() {
   
   // TODO parametrize.. or not the rate does not really affect smoothness or the
   // ability to halt
-  double rate = 10;
-  ros::Rate jogging_rate(rate);
+  // double rate = 10;
+  // ros::Rate jogging_rate(rate);
 
-  while(ros::ok()) {
+  //while(ros::ok()) {
     if(ref_msg_ != nullptr) {
       if(ref_msg_->header.stamp.sec > 0 && ref_msg_->header.stamp.nsec > 0) {
-        jogStep(rate);
+        jogStep();
       }
     }
-    jogging_rate.sleep();
-  }
+  //  jogging_rate.sleep();
+  //}
 }
 
 
@@ -232,7 +232,7 @@ void JogFrameNodeAbs::getFkPose()
   }
 }
 
-void JogFrameNodeAbs::jogStep(double rate) 
+void JogFrameNodeAbs::jogStep() 
 {
   // get the current pose, accessiable via pose_stamped_
   getFkPose();
@@ -380,7 +380,6 @@ void JogFrameNodeAbs::publishPose(sensor_msgs::JointState state)
       traj.header.frame_id = "base_link";
       traj.joint_names = joint_names;
       traj.points.push_back(point);
-      
       traj_pubs_[controller_name].publish(traj);
     }
   }
@@ -491,6 +490,7 @@ int main(int argc, char **argv)
   
   while ( ros::ok() )
   {
+    node.update();
     ros::spinOnce();
     loop_rate.sleep();
   }

@@ -1,7 +1,7 @@
 #ifndef JOG_FRAME_PANEL_ABS_H
 #define JOG_FRAME_PANEL_ABS_H
 #include <interactive_markers/interactive_marker_server.h>
-#include <jog_msgs/JogFrame.h>
+#include <jog_msgs/JogFrameAbs.h>
 
 #include <ros/ros.h>
 #include <rviz/panel.h>
@@ -46,7 +46,7 @@ class JogFramePanelAbs : public rviz::Panel
 
         interactive_markers::InteractiveMarkerServer* server_;
         visualization_msgs::InteractiveMarker* int_marker_;
-        jog_msgs::JogFrame marker_msg_;
+        jog_msgs::JogFrameAbs marker_msg_;
         bool on_publish_marker_;
         bool master_on_publish_;
 

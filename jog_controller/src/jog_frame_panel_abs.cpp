@@ -2,7 +2,6 @@
 #include <ros/ros.h>
 
 #include "jog_frame_panel_abs.h"
-#include "jog_msgs/JogFrame.h"
 
 #include <rviz/config.h>
 #include <rviz/visualization_manager.h>
@@ -30,7 +29,7 @@ JogFramePanelAbs::JogFramePanelAbs(QWidget* parent) : rviz::Panel(parent)
     QLayout* root_layout = initUi(parent);
     setLayout(root_layout);
 
-    jog_frame_abs_pub_ = nh.advertise<jog_msgs::JogFrame>( "jog_frame", 1);
+    jog_frame_abs_pub_ = nh.advertise<jog_msgs::JogFrameAbs>( "jog_frame_abs", 1);
     master_on_publish_ = false;
     avoid_collisions_ = true;
 }

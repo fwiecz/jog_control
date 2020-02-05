@@ -1,11 +1,11 @@
-#ifndef JOG_FRAME_H
-#define JOG_FRAME_H
+#ifndef JOG_FRAME_ABS_H
+#define JOG_FRAME_ABS_H
 
 #include <string>
 #include <ros/ros.h>
 #include <tf/tf.h>
 #include <mutex>
-#include <jog_msgs/JogFrame.h>
+#include <jog_msgs/JogFrameAbs.h>
 #include <sensor_msgs/JointState.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
@@ -41,17 +41,16 @@ public:
    * @breif: Default constructor for JogFrameNodeAbs Class.
    */
   JogFrameNodeAbs ();
-  void jog_frame_cb (jog_msgs::JogFrameConstPtr msg);
+  void jog_frame_cb (jog_msgs::JogFrameAbsConstPtr msg);
   void joint_state_cb (sensor_msgs::JointStateConstPtr msg);
   int get_controller_list();
-  void follow_absolute_pose_thread();
+  void update();
   void getFkPose();
-  void jogStep(double rate);
+  void jogStep();
   void publishPose(sensor_msgs::JointState state);
 protected:
   ros::Subscriber joint_state_sub_, jog_frame_sub_;
   ros::ServiceClient fk_client_, ik_client_;
-  ros::Publisher jog_frame_abs_pub_;
 
   std::map<std::string, Controller> cinfo_map_;
   std::map<std::string, TrajClient*> traj_clients_;
@@ -65,7 +64,7 @@ protected:
   bool use_action_;
   bool intermittent_;
 
-  jog_msgs::JogFrameConstPtr ref_msg_;
+  jog_msgs::JogFrameAbsConstPtr ref_msg_;
   std::mutex ref_msg_mutex_;
 
   std::string target_link_;
