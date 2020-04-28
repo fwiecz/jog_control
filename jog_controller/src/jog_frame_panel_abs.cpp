@@ -222,7 +222,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     tree->setSelectionMode(QAbstractItemView::NoSelection);
     tree->setFocusPolicy(Qt::NoFocus);
 
-    QStringList prefs = {"Enable Jogging", "Group", "Frame", "Target link", "Velocity Factor", "Collision Check"};
+    QStringList prefs = {"Enable Jogging", "Move Group", "Base Frame", "End-Effector link", "Velocity Factor", "Collision Check"};
 
     QList<QTreeWidgetItem *> items;
     for (int i = 0; i < prefs.size(); ++i) {
