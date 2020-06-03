@@ -4,15 +4,9 @@
   <arg name="use_moveit" default="false"/>
   <arg name="use_rviz" default="false"/>
   <arg name="use_joy" default="false"/>
-  <arg name="use_action" default="true"/>
+  <arg name="use_action" default="false"/>
   <arg name="intermittent" default="false"/>
   <arg name="absolute" default="false"/>
-
-  <!-- Launch fake_joint_launch -->
-  <include if="$(arg use_fake_joint)"
-	   file="$(find fake_joint_launch)/launch/ur5.launch">
-    <arg name="use_rviz" value="false"/>
-  </include>
 
   <!-- Launch MoveIt! -->
   <include if="$(arg use_moveit)"
