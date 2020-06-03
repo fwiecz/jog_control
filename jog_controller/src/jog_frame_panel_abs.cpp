@@ -151,7 +151,7 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
                 marker_msg_.pose.orientation.y = pose->orientation.y;
                 marker_msg_.pose.orientation.z = pose->orientation.z;
                 marker_msg_.pose.orientation.w = pose->orientation.w;
-                marker_msg_.velocity_factor = velocity_fac_;
+                marker_msg_.damping_factor = damping_fac_;
                 
                 if(master_on_publish_) {
                     jog_frame_abs_pub_.publish(marker_msg_);
@@ -173,7 +173,7 @@ void JogFramePanelAbs::interactiveMarkerFeedback(const visualization_msgs::Inter
             marker_msg_.pose.orientation.y = feedback->pose.orientation.y;
             marker_msg_.pose.orientation.z = feedback->pose.orientation.z;
             marker_msg_.pose.orientation.w = feedback->pose.orientation.w;
-            marker_msg_.velocity_factor = velocity_fac_;
+            marker_msg_.damping_factor = damping_fac_;
         }
     }
 }
@@ -201,9 +201,9 @@ void JogFramePanelAbs::respondFrameId(QString text)
     resetInteractiveMarker();
 }
 
-void JogFramePanelAbs::respondVelocity(double value)
+void JogFramePanelAbs::respondDamping(double value)
 {
-    velocity_fac_ = value;
+    damping_fac_ = value;
 }
 
 void JogFramePanelAbs::respondCollision(bool isChecked)
@@ -222,7 +222,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     tree->setSelectionMode(QAbstractItemView::NoSelection);
     tree->setFocusPolicy(Qt::NoFocus);
 
-    QStringList prefs = {"Enable Jogging", "Move Group", "Base Frame", "End-Effector link", "Velocity Factor", "Collision Check"};
+    QStringList prefs = {"Enable Jogging", "Move Group", "Base Frame", "End-Effector link", "Damping Factor", "Collision Check"};
 
     QList<QTreeWidgetItem *> items;
     for (int i = 0; i < prefs.size(); ++i) {
@@ -263,7 +263,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
     speedSb->setRange(0.1, 1.0);
     speedSb->setSingleStep(0.05);
     speedSb->setValue(0.95);
-    velocity_fac_ = speedSb->value();
+    damping_fac_ = speedSb->value();
     tree->setItemWidget(items.value(4), 1, speedSb);
 
     QCheckBox* toggleCollisionCb = new QCheckBox();
@@ -275,7 +275,7 @@ QLayout* JogFramePanelAbs::initUi(QWidget* parent)
 
     connect(on_off_master_, SIGNAL(toggled(bool)), this, SLOT(respondOnOffCb(bool)));
     connect(toggleCollisionCb, SIGNAL(toggled(bool)), this, SLOT(respondCollision(bool)));
-    connect(speedSb, SIGNAL(valueChanged(double)), this, SLOT(respondVelocity(double)));
+    connect(speedSb, SIGNAL(valueChanged(double)), this, SLOT(respondDamping(double)));
     connect(targetlink, SIGNAL(currentTextChanged(QString)), this, SLOT(respondTargetLink(QString)));
     connect(groupBox, SIGNAL(currentTextChanged(QString)), this, SLOT(respondGroupName(QString)));
     connect(frame_cb_, SIGNAL(currentTextChanged(QString)), this, SLOT(respondFrameId(QString)));

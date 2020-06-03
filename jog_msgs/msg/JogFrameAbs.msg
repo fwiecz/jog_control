@@ -20,8 +20,8 @@ bool avoid_collisions
 # Target pose that should be followed by the target link
 geometry_msgs/Pose pose
 
-# The velocity used for absolute jogging. It ranges from 0.1 to 1.0.
-# The velocity is not linear. It is rather cacluated by 'dist_to_goal * msg.velocity'
+# The damping used for absolute jogging. It ranges from 0.1 to 1.0.
+# It is cacluated by 'dist_to_goal * msg.damping_factor'
 # resulting in faster movements when the target is far away and precise movements
 # when the target is very close.
-float64 velocity_factor
+float64 damping_factor

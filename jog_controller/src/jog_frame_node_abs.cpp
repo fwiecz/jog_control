@@ -28,7 +28,7 @@ JogFrameNodeAbs::JogFrameNodeAbs()
   target_link_ = link_names.size() > 0 ? link_names[0] : "";
 
   avoid_collisions_ = true;
-  velocity_fac_ = 0.5;
+  damping_fac_ = 0.5;
 
   if (not use_action_ && intermittent_)
   {
@@ -134,8 +134,8 @@ void JogFrameNodeAbs::jog_frame_cb(jog_msgs::JogFrameAbsConstPtr msg)
     group_name_ = msg->group_name;
     target_link_ = msg->link_name;
     avoid_collisions_ = msg->avoid_collisions;
-    if(msg->velocity_factor != 0) {
-      velocity_fac_ = std::min(1.0, std::max(0.1, msg->velocity_factor));
+    if(msg->damping_factor != 0) {
+      damping_fac_ = std::min(1.0, std::max(0.1, msg->damping_factor));
     }
     //ROS_WARN("req mutex 1");
     std::lock_guard<std::mutex> guard_ref_msg(ref_msg_mutex_);
@@ -259,9 +259,9 @@ void JogFrameNodeAbs::jogStep()
   double dirZ = ref_msg_->pose.position.z - act_pose.position.z;
   double position_dist = sqrt(((double)dirX*dirX) + ((double)dirY*dirY) + ((double)dirZ*dirZ));
 
-  double nDirX = (dirX * velocity_fac_); 
-  double nDirY = (dirY * velocity_fac_); 
-  double nDirZ = (dirZ * velocity_fac_);
+  double nDirX = (dirX * damping_fac_); 
+  double nDirY = (dirY * damping_fac_); 
+  double nDirZ = (dirZ * damping_fac_);
   ref_pose.pose.position.x = pose_stamped_.pose.position.x + nDirX;
   ref_pose.pose.position.y = pose_stamped_.pose.position.y + nDirY;
   ref_pose.pose.position.z = pose_stamped_.pose.position.z + nDirZ;
@@ -272,7 +272,7 @@ void JogFrameNodeAbs::jogStep()
   tf::quaternionMsgToTF(ref_msg_->pose.orientation, q_target);
   
   double orientation_dist = tf::angleShortestPath(q_act, q_target);
-  q_ref = tf::slerp(q_act, q_target, velocity_fac_);
+  q_ref = tf::slerp(q_act, q_target, damping_fac_);
 
   try {
     tf::assertQuaternionValid(q_act);
@@ -284,7 +284,7 @@ void JogFrameNodeAbs::jogStep()
   }
   
   // position and orientation are close enough
-  if(position_dist < 0.005 && orientation_dist < 0.001) {
+  if(position_dist < 0.0005 && orientation_dist < 0.001) {
     return;
   }
 

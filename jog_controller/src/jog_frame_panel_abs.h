@@ -33,7 +33,7 @@ class JogFramePanelAbs : public rviz::Panel
     protected Q_SLOTS:
         void update();
         void respondOnOffCb(bool isChecked);
-        void respondVelocity(double value);
+        void respondDamping(double value);
         void respondTargetLink(QString text);
         void respondGroupName(QString text);
         void respondFrameId(QString text);
@@ -54,7 +54,7 @@ class JogFramePanelAbs : public rviz::Panel
         std::string group_name_;
         std::string frame_id_;
         bool avoid_collisions_;
-        double velocity_fac_;
+        double damping_fac_;
 };
 
 }

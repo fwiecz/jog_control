@@ -71,7 +71,7 @@ protected:
   std::string group_name_;
   std::string frame_id_;
   bool avoid_collisions_;
-  double velocity_fac_;
+  double damping_fac_;
 
   std::vector<std::string> exclude_joints_;
   sensor_msgs::JointState joint_state_;
